@@ -1,0 +1,5 @@
+data/
+.idea
+**/.ipynb_checkpoints
+.pytest_cache
+.venv*
