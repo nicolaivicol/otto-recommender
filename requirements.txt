@@ -15,3 +15,5 @@ ipynb-py-convert
 kaggle
 beartype  # to match the requirements in recsys-dataset project and run testset.py
 fastparquet
+polars
+pyarrow

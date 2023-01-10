@@ -2,9 +2,11 @@ name: otto-recommender
 channels:
   - defaults
   - conda-forge
+  - rapidsai
+  - nvidia
 dependencies:
   - pip
-  - python>=3.7
+  - python>=3.10
   - numpy
   - pandas
   - scipy
@@ -18,5 +20,9 @@ dependencies:
   - notebook
   - jupyter
   - ipynb-py-convert
-  - pip:
-
+  - kaggle
+  - beartype  # to match the requirements in recsys-dataset project and run testset.py
+  - fastparquet
+  - polars
+  - pyarrow
+  - cudf
