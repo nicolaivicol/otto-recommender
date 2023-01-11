@@ -108,7 +108,8 @@ def keep_last_n_aids(df_sessions_aids_full: pl.DataFrame) -> pl.DataFrame:
               pl.max('ts').cast(pl.Int32).alias('max_ts_aid'), ]) \
         .sort(['session']) \
         .select([pl.all(),  # select all column from the original df
-                 pl.col('max_ts_aid').rank('ordinal', reverse=True).over('session').clip_max(127).cast(pl.Int8).alias('ts_order_aid'), # start count from last
+                 (pl.col('max_ts_aid').rank('ordinal', reverse=True).over('session').
+                  clip_max(127).cast(pl.Int8).alias('ts_order_aid')), # start counting from last
                  ])
 
     # keep only the last N events in session (to truncate long sessions)
@@ -233,7 +234,8 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20):
     Compute recall without k by taking all candidates into account
     to assess the maximum achievable recall assuming a perfect ranking
     """
-    r = {}
+    r = dict()
+
     for type in config.TYPES:
         # type = 'carts'
         pred_exists = f'pred_{type}' in df.columns
@@ -258,8 +260,12 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20):
     # carts:  1.910 2.119 1.000 1.000 1.000 1.000 1.000 5.000 8.000 10.000 61.000
     # orders: 2.012 2.052 1.000 1.000 1.000 1.000 1.000 6.000 8.000 10.000 32.000
 
+    # recall after retrieval:
+    # ver 1: 2023-01-11 21:56, commit 57346077
     # {'recall_clicks': 0.49162, 'recall_carts': 0.431, 'recall_orders': 0.64224, 'recall': 0.56381}
     # {'recall_clicks': 0.49785, 'recall_carts': 0.44199, 'recall_orders': 0.65814, 'recall': 0.57727}
+    # {'recall_clicks': 0.48427, 'recall_carts': 0.42086, 'recall_orders': 0.64831, 'recall': 0.56367}
+    # {'recall_clicks': 0.48555, 'recall_carts': 0.43733, 'recall_orders': 0.65651, 'recall': 0.57366}
 
     return r
 
@@ -268,8 +274,8 @@ if __name__ == '__main__':
     aid_pairs_co_events = get_pairs_for_all_co_event_types()
 
     join_labels = True
-    file_parquet_sessions = '../data/train-test-parquet/test_sessions/0200000_0300000.parquet'
-    file_parquet_label = '../data/train-test-parquet/test_labels/0200000_0300000.parquet'
+    file_parquet_sessions = '../data/train-test-parquet/test_sessions/0500000_0600000.parquet'
+    file_parquet_label = '../data/train-test-parquet/test_labels/0500000_0600000.parquet'
 
     df_sessions_aids_full = pl.read_parquet(file_parquet_sessions)
     if join_labels:
