@@ -5,9 +5,28 @@
 * Data documentation from provider: https://github.com/otto-de/recsys-dataset
 
 ## What's in the data?
-u* **12.9M** real-world anonymized user sessions ()
+* **12.9M** real-world anonymized user sessions ()
 * **220M** events, consisting of clicks, carts and orders
 * **1.8M** unique articles in the catalogue
+
+### Number of AIDs per session (in test data):
+* **clicks**
+
+| mean | std  |   min |   10% |   25% |   50% |   95% |   98% |   99% |   max |
+|------|------|-------|-------|-------|-------|-------|-------|-------|-------|
+| 3.41 | 6.35 |     1 |     1 |     1 |     2 |    12 |    20 |    28 |   465 |
+
+* **carts**  
+
+| mean |  std |   min |   10% |   25% |   50% |   95% |   98% |   99% |   max |
+|------|------|-------|-------|-------|-------|-------|-------|-------|-------|
+| 2.22 | 2.63 |     1 |     1 |     1 |     1 |     7 |    10 |    14 |    53 |
+
+* **orders**
+
+| mean |  std |   min |   10% |   25% |   50% |   95% |   98% |   99% |   max |
+|------|------|-------|-------|-------|-------|-------|-------|-------|-------|
+| 1.85 | 1.97 |     1 |     1 |     1 |     1 |     5 |     8 |    10 |    31 |
 
 ## Solution
 High level:  
