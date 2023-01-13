@@ -196,8 +196,8 @@ def get_top_k_similar_faiss(
     dists, idxs = index_faiss_ivff.search(np.array(words_q_embeddings_found), k=k)  # list of lists
     nereast_words = [[words[i] for i in idxs_nereast_words] for idxs_nereast_words in idxs]  # replace indices with AIDs ("words")
 
-    res = pl.DataFrame({'aid': words_q_found, 'next_aid': nereast_words, 'dist_w2vec': dists}). \
-        explode(['next_aid', 'dist_w2vec']). \
+    res = pl.DataFrame({'aid': words_q_found, 'aid_next': nereast_words, 'dist_w2vec': dists}). \
+        explode(['aid_next', 'dist_w2vec']). \
         select([pl.all().cast(pl.Int32),
                 (pl.col('dist_w2vec').rank('ordinal').over('aid').
                  clip_max(127).cast(pl.Int8).alias('rank_w2vec'))])

@@ -2,6 +2,7 @@ import polars as pl
 from typing import List, Dict, Union
 
 import config
+from feateng.w2vec import retrieve_w2vec_knns_via_faiss_index
 from utils import describe_numeric
 
 
@@ -138,38 +139,46 @@ def make_unique_session_aid_pairs(df_sessions_aids: pl.DataFrame) -> pl.DataFram
     return df_sessions_aids
 
 
-def get_all_aid_pairs(df_sessions_aids: pl.DataFrame, pairs_co_events: Dict[str, pl.DataFrame]) -> pl.DataFrame:
+def get_all_aid_pairs(
+        df_sessions_aids: pl.DataFrame,
+        pairs_co_events: Dict[str, pl.DataFrame],
+        df_knns_w2vec: pl.DataFrame,
+    ) -> pl.DataFrame:
     """
     Create pairs
     :param df_sessions_aids: sessions with AIDs
     :param pairs_co_events: data frames with all types of co-event counts
+    :param df_knns_w2vec: data frame with k nearest neighbours based on word2vec
     :return:
     """
-    # Pair aid with itself (next_aid=aid)
-    df_pairs_self = df_sessions_aids[['aid']].with_columns(pl.col('aid').alias('aid_next')).unique()
+    # Pair aid with itself (aid_next=aid)
+    df_pairs_self = df_sessions_aids.select(['aid']).with_columns(pl.col('aid').alias('aid_next')).unique()
     # ... this by itself provides ~3 unique candidate AIDs per session
     #  mean   std   min    5%   10%   25%   50%    95%    98%    99%    max
     # 3.250 4.420 1.000 1.000 1.000 1.000 2.000 12.000 20.000 25.000 30.000
 
-    # Pairs from co events (next_aid based on co-counts with aid)
+    # Pairs from co events (aid_next based on co-counts with aid)
     df_pairs_from_co_events = get_pairs_for_all_co_event_types_for_aids(df_sessions_aids, pairs_co_events)
     # ... this by itself provides ~39 unique candidate AIDs per session
     #   mean    std   min    5%   10%    25%    50%     95%     98%     99%     max
     # 39.454 49.779 1.000 1.000 5.000 14.000 24.000 136.000 213.000 267.000 627.000
 
-    # pairs from word2vec (next_aid based on similarity with aid)
-    # TODO: retrieve top N most similar AIDs
+    # pairs from word2vec (aid_next based on similarity with aid)
+    df_pairs_knns_w2vec = df_knns_w2vec.select(['aid', 'aid_next'])
 
     # concatenate pairs from all sources
     df_pairs = pl.concat([
         df_pairs_self,
         df_pairs_from_co_events,
+        df_pairs_knns_w2vec,
     ]).unique()
 
-    # All sources together retrieve ~40 unique candidate AIDs per session
+    # All sources together retrieve ~72 unique candidate AIDs per session
     #   mean    std   min    5%   10%    25%    50%     95%     98%     99%     max
     # 39.678 50.039 1.000 2.000 5.000 14.000 24.000 137.000 215.000 269.000 627.000
-    # df.groupby(['session']).agg([pl.n_unique('aid_next').alias('count')]).sort(['count'], reverse=True).to_pandas()
+    # with w2vec:
+    #   mean    std   min    5%    10%    25%    50%     95%     98%     99%     max
+    # 72.171 88.019 1.000 9.000 23.000 30.000 39.000 236.000 382.000 491.000 957.000
 
     return df_pairs
 
@@ -223,6 +232,10 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.mean('rank_buy_to_buy').cast(pl.Int32).alias('rank_buy_to_buy'),
         pl.mean('count_rel_buy_to_buy').cast(pl.Int32).alias('count_rel_buy_to_buy'),
 
+        (pl.col('rank_w2vec') > 0).sum().alias('n_w2vec'),
+        pl.mean('dist_w2vec').cast(pl.Int32).alias('dist_w2vec'),
+        pl.mean('rank_w2vec').cast(pl.Int32).alias('rank_w2vec'),
+        pl.min('rank_w2vec').cast(pl.Int32).alias('best_rank_w2vec'),
     ])
     # df1 = df.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
     assert all([c in df.columns for c in cols_after_remove_aid])
@@ -267,10 +280,15 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20):
     # {'recall_clicks': 0.48427, 'recall_carts': 0.42086, 'recall_orders': 0.64831, 'recall': 0.56367}
     # {'recall_clicks': 0.48555, 'recall_carts': 0.43733, 'recall_orders': 0.65651, 'recall': 0.57366}
 
+    # ver 2: 2023-01-14 01:44
+    # {'recall_clicks': 0.52446, 'recall_carts': 0.4658, 'recall_orders': 0.67116, 'recall': 0.59488}
+
     return r
 
 
 if __name__ == '__main__':
+    word2vec_model_name = 'word2vec-train-test-types-all-size-100-mincount-5-window-10'
+    df_knns_w2vec = retrieve_w2vec_knns_via_faiss_index(word2vec_model_name)
     aid_pairs_co_events = get_pairs_for_all_co_event_types()
 
     join_labels = True
@@ -283,7 +301,7 @@ if __name__ == '__main__':
 
     df_sessions = compute_session_stats(df_sessions_aids_full)
     df_sessions_aids = keep_last_n_aids(df_sessions_aids_full)
-    df_aid_pairs = get_all_aid_pairs(df_sessions_aids, aid_pairs_co_events)
+    df_aid_pairs = get_all_aid_pairs(df_sessions_aids, aid_pairs_co_events, df_knns_w2vec)
     df_sessions_aids = make_unique_session_aid_pairs(df_sessions_aids)
 
     df = df_sessions_aids.join(df_aid_pairs, on='aid', how='left')  # join pairs from co-events, etc.
@@ -293,8 +311,8 @@ if __name__ == '__main__':
     for type_count, df_count in aid_pairs_co_events.items():
         df = df.join(df_count, on=['aid', 'aid_next'], how='left')
 
-    # TODO: join word2vec similarity by aid-aid_next
-    # ...
+    # join word2vec rank/distance by aid-aid_next
+    df = df.join(df_knns_w2vec, on=['aid', 'aid_next'], how='left')
 
     df = keep_sessions_aids_next(df)
 
