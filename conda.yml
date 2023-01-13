@@ -25,4 +25,7 @@ dependencies:
   - fastparquet
   - polars
   - pyarrow
-  - cudf
+  # - cudf
+  - gensim
+  - faiss
+  - annoy

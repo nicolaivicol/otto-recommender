@@ -17,3 +17,6 @@ beartype  # to match the requirements in recsys-dataset project and run testset.
 fastparquet
 polars
 pyarrow
+gensim
+faiss
+# annoy  # fails installation

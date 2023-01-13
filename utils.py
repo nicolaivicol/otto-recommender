@@ -1,3 +1,5 @@
+import os
+import shutil
 import math
 import numpy as np
 import pandas as pd
@@ -48,4 +50,12 @@ def set_display_options():
     pd.set_option('display.float_format', lambda x: '%.3f' % x)
     warnings.simplefilter('ignore')
     display(HTML("<style>.container { width:80% !important; }</style>"))
+
+
+# def remove_folder(dir):
+#     if os.path.exists(dir):
+#         try:
+#             shutil.rmtree(dir)
+#         except OSError as e:
+#             warnings.warn("Error: %s - %s." % (e.filename, e.strerror))
 

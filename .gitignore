@@ -1,4 +1,5 @@
 data/
+artifacts/
 .idea
 **/.ipynb_checkpoints
 .pytest_cache

@@ -2,6 +2,31 @@
 # This contains all configs/parameters used in this project.
 # ******************************************************************************
 
+from pathlib import Path
+import os
+import json
+import copy
+import logging
+from typing import List
+
+# Directories
+# ******************************************************************************
+DIR_PROJ = (Path(__file__) / '..').resolve()
+DIR_DATA = f'{DIR_PROJ}/data'
+DIR_ARTIFACTS = f'{DIR_PROJ}/artifacts'
+os.makedirs(DIR_ARTIFACTS, exist_ok=True)  # Create dir for artifacts if it does not exist
+
+# Logging
+# ******************************************************************************
+LOGS_LEVEL = logging.DEBUG
+FILE_LOGS = f'{DIR_ARTIFACTS}/logs.log'
+# set logging config:
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler(FILE_LOGS), logging.StreamHandler()],
+    level=LOGS_LEVEL,
+)
+
 # Feature engineering
 # ******************************************************************************
 TYPES = ['clicks', 'carts', 'orders']
@@ -62,3 +87,28 @@ RETRIEVAL_CO_COUNTS_TO_JOIN = [
     'cart_to_cart',
     'buy_to_buy',
 ]
+
+W2VEC_USE_CACHE = True
+W2VEC_MODELS = {
+    'word2vec-train-test-types-all-size-100-mincount-5-window-10': {
+        # source of sessions (as sentences) with AIDs (as words)
+        'dir_sessions': [
+            f'{DIR_DATA}/train-test-parquet/train_sessions/*.parquet',
+            f'{DIR_DATA}/train-test-parquet/test_sessions/*.parquet'
+        ],
+        'types': [0, 1, 2],  # which event types to filter
+        # word2vec embedding parameters:
+        'params': {
+            'vector_size': 100,
+            'window': 10,
+            'min_count': 5,
+        },
+        'k': 20,  # number of neighbours to retrieve
+        'first_n_aids': 600_000,  # for how many AIDs (words) to find neighbours (output df has first_n_aids*k rows)
+        # params for faiss index:
+        'nlist': 100, # how many cells
+        'nprobe': 3,  # how many closest cells to search
+        # params for annoy index:
+        'n_trees': 20,  # number of trees
+    },
+}
