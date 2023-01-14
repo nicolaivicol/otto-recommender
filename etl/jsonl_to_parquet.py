@@ -1,3 +1,4 @@
+import argparse
 import os
 import numpy as np
 import pandas as pd
@@ -5,10 +6,12 @@ import math
 from pathlib import Path
 from tqdm import tqdm
 from typing import Dict, List, Union
+import logging
+import json
 
-id2type = ['clicks', 'carts', 'orders']
-type2id = {'clicks': 0, 'carts': 1, 'orders': 2}
-# df['type'].map(type2id)  # df['type'].map(lambda i: id2type[i])
+import config
+
+log = logging.getLogger('jsonl_to_parquet.py')
 
 
 def get_number_of_lines(file_path) -> int:
@@ -20,7 +23,7 @@ def get_number_of_lines(file_path) -> int:
 def optimize_df_from_jsonl(df: pd.DataFrame) -> pd.DataFrame:
     df['session'] = df['session'].astype(np.int32)
     df['aid'] = df['aid'].astype(np.int32)
-    df['type'] = df['type'].map(type2id).astype(np.int8)  # map string to int
+    df['type'] = df['type'].map(config.TYPE2ID).astype(np.int8)  # map string to int
     if 'ts' in df.columns:
         df['ts'] = (df['ts'] / 1000).astype(np.int32)  # milliseconds to seconds
     return df
@@ -82,10 +85,21 @@ def transform_jsonl_to_parquet(file_jsonl, out_dir, type_data='sessions', chunks
 
 
 if __name__ == '__main__':
-    dir_jsonl = '../data/train-test'
-    dir_parquet = '../data/train-test-parquet'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_split_alias', default='train-test')
+    args = parser.parse_args()
 
-    transform_jsonl_to_parquet(f'{dir_jsonl}/test_labels.jsonl', dir_parquet, 'labels')
+    log.info(f'Start jsonl_to_parquet.py with parameters:' + '\n' + json.dumps(vars(args), indent=2))
+    log.info('This transforms jsonl files to parquet, ETA ~15min.')
+
+    dir_jsonl = f'{config.DIR_DATA}/{args.data_split_alias}'
+    dir_parquet = f'{config.DIR_DATA}/{args.data_split_alias}-parquet'
+
     transform_jsonl_to_parquet(f'{dir_jsonl}/test_sessions.jsonl', dir_parquet)
-    transform_jsonl_to_parquet(f'{dir_jsonl}/test_sessions_full.jsonl', dir_parquet)
-    transform_jsonl_to_parquet(f'{dir_jsonl}/train_sessions.jsonl', dir_parquet)  # takes ~15min
+    transform_jsonl_to_parquet(f'{dir_jsonl}/train_sessions.jsonl', dir_parquet)
+
+    if os.path.exists(f'{dir_jsonl}/test_labels.jsonl'):
+        transform_jsonl_to_parquet(f'{dir_jsonl}/test_labels.jsonl', dir_parquet, 'labels')
+
+    if os.path.exists(f'{dir_jsonl}/test_sessions_full.jsonl'):
+        transform_jsonl_to_parquet(f'{dir_jsonl}/test_sessions_full.jsonl', dir_parquet)
