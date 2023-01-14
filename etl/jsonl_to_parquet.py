@@ -89,7 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_split_alias', default='train-test')
     args = parser.parse_args()
 
-    log.info(f'Start jsonl_to_parquet.py with parameters:' + '\n' + json.dumps(vars(args), indent=2))
+    log.info('Start jsonl_to_parquet.py with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This transforms jsonl files to parquet, ETA ~15min.')
 
     dir_jsonl = f'{config.DIR_DATA}/{args.data_split_alias}'
@@ -103,3 +103,5 @@ if __name__ == '__main__':
 
     if os.path.exists(f'{dir_jsonl}/test_sessions_full.jsonl'):
         transform_jsonl_to_parquet(f'{dir_jsonl}/test_sessions_full.jsonl', dir_parquet)
+
+    log.info('End jsonl_to_parquet.py')
