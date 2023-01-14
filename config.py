@@ -32,6 +32,7 @@ logging.basicConfig(
 TYPES = ['clicks', 'carts', 'orders']
 TYPE2ID = {'clicks': 0, 'carts': 1, 'orders': 2}
 ID2TYPE = {0: 'clicks', 1: 'carts', 2: 'orders'}
+# df['type'].map(type2id) # df['type'].map(lambda i: id2type[i])
 
 # filter co-events when doing self merge
 MIN_TIME_TO_NEXT = 0  # value zero means that next event can't be before this event
