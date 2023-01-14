@@ -89,8 +89,8 @@ def load_w2vec_model(model_name) -> Word2Vec:
 def train_w2vec_model(model_name) -> Word2Vec:
     tic = time.time()
     model_config = config.W2VEC_MODELS[model_name]
-    logger.debug(f'training Word2Vec with name={model_name} and config: {json.dumps(model_config, indent=2)}')
-
+    logger.debug(f'training Word2Vec with name=\'{model_name}\' '
+                 f'and config: {json.dumps(model_config, indent=2)}')
     df_sentences = load_sessions_as_sentences(model_config['dir_sessions'], types=model_config.get('types', None))
     w2vec_model = Word2Vec(sentences=df_sentences['sentence'].to_list(), workers=16, **model_config['params'])
 
@@ -218,7 +218,7 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
         k = config.W2VEC_MODELS[model_name].get('k', 20)
 
     if first_n_aids is None:
-        first_n_aids = config.W2VEC_MODELS[model_name].get('first_n_aids', 20)
+        first_n_aids = config.W2VEC_MODELS[model_name].get('first_n_aids', 600_000)
 
     file_nns = f'{get_model_file(model_name)}.top-{k}-nns-{first_n_aids}-aids.parquet'
 

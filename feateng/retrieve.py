@@ -143,6 +143,7 @@ def get_all_aid_pairs(
         df_sessions_aids: pl.DataFrame,
         pairs_co_events: Dict[str, pl.DataFrame],
         df_knns_w2vec: pl.DataFrame,
+        df_knns_w2vec_2: pl.DataFrame,
     ) -> pl.DataFrame:
     """
     Create pairs
@@ -165,12 +166,14 @@ def get_all_aid_pairs(
 
     # pairs from word2vec (aid_next based on similarity with aid)
     df_pairs_knns_w2vec = df_knns_w2vec.select(['aid', 'aid_next'])
+    df_pairs_knns_w2vec_2 = df_knns_w2vec_2.select(['aid', 'aid_next'])
 
     # concatenate pairs from all sources
     df_pairs = pl.concat([
         df_pairs_self,
         df_pairs_from_co_events,
         df_pairs_knns_w2vec,
+        df_pairs_knns_w2vec_2,
     ]).unique()
 
     # All sources together retrieve ~72 unique candidate AIDs per session
@@ -236,6 +239,12 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.mean('dist_w2vec').cast(pl.Int32).alias('dist_w2vec'),
         pl.mean('rank_w2vec').cast(pl.Int32).alias('rank_w2vec'),
         pl.min('rank_w2vec').cast(pl.Int32).alias('best_rank_w2vec'),
+
+        (pl.col('rank_w2vec_2') > 0).sum().alias('n_w2vec_2'),
+        pl.mean('dist_w2vec_2').cast(pl.Int32).alias('dist_w2vec_2'),
+        pl.mean('rank_w2vec_2').cast(pl.Int32).alias('rank_w2vec_2'),
+        pl.min('rank_w2vec_2').cast(pl.Int32).alias('best_rank_w2vec_2'),
+
     ])
     # df1 = df.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
     assert all([c in df.columns for c in cols_after_remove_aid])
@@ -283,17 +292,27 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20):
     # ver 2: 2023-01-14 01:44, commit 5e3f7030
     # {'recall_clicks': 0.52446, 'recall_carts': 0.4658, 'recall_orders': 0.67116, 'recall': 0.59488}
 
+    # ver 3: 2023-01-14 02:24,
+    # {'recall_clicks': 0.53438, 'recall_carts': 0.47283, 'recall_orders': 0.66918, 'recall': 0.59679}
+    # {'recall_clicks': 0.54341, 'recall_carts': 0.48132, 'recall_orders': 0.67977, 'recall': 0.6066}
+    # {'recall_clicks': 0.53096, 'recall_carts': 0.46004, 'recall_orders': 0.6705, 'recall': 0.59341}
+    # {'recall_clicks': 0.53178, 'recall_carts': 0.47703, 'recall_orders': 0.67849, 'recall': 0.60338}
+
     return r
 
 
 if __name__ == '__main__':
     word2vec_model_name = 'word2vec-train-test-types-all-size-100-mincount-5-window-10'
     df_knns_w2vec = retrieve_w2vec_knns_via_faiss_index(word2vec_model_name)
+
+    word2vec_model_name_2 = 'word2vec-train-test-types-1-2-size-100-mincount-5-window-10'
+    df_knns_w2vec_2 = retrieve_w2vec_knns_via_faiss_index(word2vec_model_name_2)
+
     aid_pairs_co_events = get_pairs_for_all_co_event_types()
 
     join_labels = True
-    file_parquet_sessions = '../data/train-test-parquet/test_sessions/0500000_0600000.parquet'
-    file_parquet_label = '../data/train-test-parquet/test_labels/0500000_0600000.parquet'
+    file_parquet_sessions = '../data/train-test-parquet/test_sessions/0200000_0300000.parquet'
+    file_parquet_label = '../data/train-test-parquet/test_labels/0200000_0300000.parquet'
 
     df_sessions_aids_full = pl.read_parquet(file_parquet_sessions)
     if join_labels:
@@ -301,7 +320,7 @@ if __name__ == '__main__':
 
     df_sessions = compute_session_stats(df_sessions_aids_full)
     df_sessions_aids = keep_last_n_aids(df_sessions_aids_full)
-    df_aid_pairs = get_all_aid_pairs(df_sessions_aids, aid_pairs_co_events, df_knns_w2vec)
+    df_aid_pairs = get_all_aid_pairs(df_sessions_aids, aid_pairs_co_events, df_knns_w2vec, df_knns_w2vec_2)
     df_sessions_aids = make_unique_session_aid_pairs(df_sessions_aids)
 
     df = df_sessions_aids.join(df_aid_pairs, on='aid', how='left')  # join pairs from co-events, etc.
@@ -313,6 +332,9 @@ if __name__ == '__main__':
 
     # join word2vec rank/distance by aid-aid_next
     df = df.join(df_knns_w2vec, on=['aid', 'aid_next'], how='left')
+
+    df_knns_w2vec_2 = df_knns_w2vec_2.rename({'dist_w2vec': 'dist_w2vec_2', 'rank_w2vec': 'rank_w2vec_2'})
+    df = df.join(df_knns_w2vec_2, on=['aid', 'aid_next'], how='left')
 
     df = keep_sessions_aids_next(df)
 
