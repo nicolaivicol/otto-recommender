@@ -352,6 +352,7 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_1_2'),
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_all'),
     ])
+    df = df.with_column(pl.col('^src_').fill_null(pl.lit(0)))
 
     # replace NULLs with -1
     df = df.with_column(pl.col(df.columns).fill_null(pl.lit(-1)))
