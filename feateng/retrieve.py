@@ -292,7 +292,7 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20):
     # ver 2: 2023-01-14 01:44, commit 5e3f7030
     # {'recall_clicks': 0.52446, 'recall_carts': 0.4658, 'recall_orders': 0.67116, 'recall': 0.59488}
 
-    # ver 3: 2023-01-14 02:24,
+    # ver 3: 2023-01-14 02:24, commit 7faa73d1
     # {'recall_clicks': 0.53438, 'recall_carts': 0.47283, 'recall_orders': 0.66918, 'recall': 0.59679}
     # {'recall_clicks': 0.54341, 'recall_carts': 0.48132, 'recall_orders': 0.67977, 'recall': 0.6066}
     # {'recall_clicks': 0.53096, 'recall_carts': 0.46004, 'recall_orders': 0.6705, 'recall': 0.59341}
