@@ -26,6 +26,7 @@ set_display_options()
 # https://davidefiocco.github.io/nearest-neighbor-search-with-faiss/
 # https://engineering.fb.com/2017/03/29/data-infrastructure/faiss-a-library-for-efficient-similarity-search/
 # https://github.com/spotify/annoy
+# https://jalammar.github.io/illustrated-word2vec/
 
 
 # number of AIDs per session in train/test:
