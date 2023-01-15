@@ -89,11 +89,11 @@ def compute_session_stats(df_test: pl.DataFrame):
     """
     df_session = df_test \
         .groupby(['session']) \
-        .agg([pl.count('aid').alias('n_events_session'),
-              pl.n_unique('aid').alias('n_aids_session'),
-              (pl.col('type') == 0).sum().alias('n_clicks_session'),
-              (pl.col('type') == 1).sum().alias('n_carts_session'),
-              (pl.col('type') == 2).sum().alias('n_orders_session'),
+        .agg([pl.count('aid').cast(pl.Int16).alias('n_events_session'),
+              pl.n_unique('aid').cast(pl.Int16).alias('n_aids_session'),
+              (pl.col('type') == 0).sum().cast(pl.Int16).alias('n_clicks_session'),
+              (pl.col('type') == 1).sum().cast(pl.Int16).alias('n_carts_session'),
+              (pl.col('type') == 2).sum().cast(pl.Int16).alias('n_orders_session'),
               pl.min('ts').alias('min_ts_session'),
               pl.max('ts').alias('max_ts_session'),
               ]) \
@@ -207,47 +207,47 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
 
     df = df.groupby(['session', 'aid_next']) \
         .agg([
-        pl.count().alias('n_uniq_aid'),
-        (pl.col('n_aid_clicks') > 0).sum().alias('n_uniq_aid_clicks'),
-        (pl.col('n_aid_carts') > 0).sum().alias('n_uniq_aid_carts'),
-        (pl.col('n_aid_orders') > 0).sum().alias('n_uniq_aid_orders'),
+        pl.count().cast(pl.Int16).alias('n_uniq_aid'),
+        (pl.col('n_aid_clicks') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_clicks'),
+        (pl.col('n_aid_carts') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_carts'),
+        (pl.col('n_aid_orders') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_orders'),
         (pl.col('aid') == pl.col('aid_next')).sum().cast(pl.Int8).alias('n_aid_next_is_aid'),
 
-        pl.sum('n_aid').alias('n_aid'),
-        pl.sum('n_aid_clicks').alias('n_aid_clicks'),
-        pl.sum('n_aid_carts').alias('n_aid_carts'),
-        pl.sum('n_aid_orders').alias('n_aid_orders'),
+        pl.sum('n_aid').cast(pl.Int16).alias('n_aid'),
+        pl.sum('n_aid_clicks').cast(pl.Int16).alias('n_aid_clicks'),
+        pl.sum('n_aid_carts').cast(pl.Int16).alias('n_aid_carts'),
+        pl.sum('n_aid_orders').cast(pl.Int16).alias('n_aid_orders'),
 
         pl.max('max_ts_aid').cast(pl.Int32).alias('max_ts_aid'),
-        pl.max('max_ts_aid_clicks').alias('max_ts_aid_clicks'),
-        pl.max('max_ts_aid_carts').alias('max_ts_aid_carts'),
-        pl.max('max_ts_aid_orders').alias('max_ts_aid_orders'),
+        pl.max('max_ts_aid_clicks').cast(pl.Int32).alias('max_ts_aid_clicks'),
+        pl.max('max_ts_aid_carts').cast(pl.Int32).alias('max_ts_aid_carts'),
+        pl.max('max_ts_aid_orders').cast(pl.Int32).alias('max_ts_aid_orders'),
 
         pl.mean('count_click_to_click').cast(pl.Int32).alias('count_click_to_click'),
-        pl.mean('rank_click_to_click').cast(pl.Int32).alias('rank_click_to_click'),
-        pl.mean('count_rel_click_to_click').cast(pl.Int32).alias('count_rel_click_to_click'),
+        pl.mean('rank_click_to_click').cast(pl.Int16).alias('rank_click_to_click'),
+        pl.mean('count_rel_click_to_click').cast(pl.Int16).alias('count_rel_click_to_click'),
 
         pl.mean('count_click_to_cart_or_buy').cast(pl.Int32).alias('count_click_to_cart_or_buy'),
-        pl.mean('rank_click_to_cart_or_buy').cast(pl.Int32).alias('rank_click_to_cart_or_buy'),
-        pl.mean('count_rel_click_to_cart_or_buy').cast(pl.Int32).alias('count_rel_click_to_cart_or_buy'),
+        pl.mean('rank_click_to_cart_or_buy').cast(pl.Int16).alias('rank_click_to_cart_or_buy'),
+        pl.mean('count_rel_click_to_cart_or_buy').cast(pl.Int16).alias('count_rel_click_to_cart_or_buy'),
 
         pl.mean('count_cart_to_cart').cast(pl.Int32).alias('count_cart_to_cart'),
-        pl.mean('rank_cart_to_cart').cast(pl.Int32).alias('rank_cart_to_cart'),
-        pl.mean('count_rel_cart_to_cart').cast(pl.Int32).alias('count_rel_cart_to_cart'),
+        pl.mean('rank_cart_to_cart').cast(pl.Int16).alias('rank_cart_to_cart'),
+        pl.mean('count_rel_cart_to_cart').cast(pl.Int16).alias('count_rel_cart_to_cart'),
 
         pl.mean('count_buy_to_buy').cast(pl.Int32).alias('count_buy_to_buy'),
-        pl.mean('rank_buy_to_buy').cast(pl.Int32).alias('rank_buy_to_buy'),
-        pl.mean('count_rel_buy_to_buy').cast(pl.Int32).alias('count_rel_buy_to_buy'),
+        pl.mean('rank_buy_to_buy').cast(pl.Int16).alias('rank_buy_to_buy'),
+        pl.mean('count_rel_buy_to_buy').cast(pl.Int16).alias('count_rel_buy_to_buy'),
 
-        (pl.col('rank_w2vec_all') > 0).sum().alias('n_w2vec_all'),
+        (pl.col('rank_w2vec_all') > 0).sum().cast(pl.Int16).alias('n_w2vec_all'),
         pl.mean('dist_w2vec_all').cast(pl.Int32).alias('dist_w2vec_all'),
-        pl.mean('rank_w2vec_all').cast(pl.Int32).alias('rank_w2vec_all'),
-        pl.min('rank_w2vec_all').cast(pl.Int32).alias('best_rank_w2vec_all'),
+        pl.mean('rank_w2vec_all').cast(pl.Int16).alias('rank_w2vec_all'),
+        pl.min('rank_w2vec_all').cast(pl.Int16).alias('best_rank_w2vec_all'),
 
-        (pl.col('rank_w2vec_1_2') > 0).sum().alias('n_w2vec_1_2'),
+        (pl.col('rank_w2vec_1_2') > 0).sum().cast(pl.Int16).alias('n_w2vec_1_2'),
         pl.mean('dist_w2vec_1_2').cast(pl.Int32).alias('dist_w2vec_1_2'),
-        pl.mean('rank_w2vec_1_2').cast(pl.Int32).alias('rank_w2vec_1_2'),
-        pl.min('rank_w2vec_1_2').cast(pl.Int32).alias('best_rank_w2vec_1_2'),
+        pl.mean('rank_w2vec_1_2').cast(pl.Int16).alias('rank_w2vec_1_2'),
+        pl.min('rank_w2vec_1_2').cast(pl.Int16).alias('best_rank_w2vec_1_2'),
 
     ])
     # df1 = df.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
@@ -370,7 +370,7 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         for type, type_id in config.TYPE2ID.items():
             df_labels_type = df_labels. \
                 filter(pl.col('type') == type_id). \
-                with_columns([pl.lit(1).alias(f'target_{type}')]) \
+                with_columns([pl.lit(1).cast(pl.Int8).alias(f'target_{type}')]) \
                 .drop('type')
             df = df.join(df_labels_type,
                          left_on=['session', 'aid_next'],
@@ -398,7 +398,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     log.info('Start retrieve.py with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This retrieves candidates and generates features, ETA ~20min.')
+    log.info('This retrieves candidates and generates features, ETA ~15min.')
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
@@ -417,7 +417,7 @@ if __name__ == '__main__':
 
     files_sessions = sorted(glob.glob(f'{dir_sessions}/*.parquet'))
 
-    for file_sessions in tqdm(files_sessions[:2], total=len(files_sessions), unit='part'):
+    for file_sessions in tqdm(files_sessions, total=len(files_sessions), unit='part'):
         retrieve_and_gen_feats(
             file_sessions=file_sessions,
             file_labels=f'{dir_labels}/{os.path.basename(file_sessions)}',
