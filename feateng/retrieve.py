@@ -223,7 +223,6 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.max('max_ts_aid_carts').alias('max_ts_aid_carts'),
         pl.max('max_ts_aid_orders').alias('max_ts_aid_orders'),
 
-        (pl.col('count_click_to_click') > 0).any().cast(pl.Int8).alias('src_click_to_click'),
         pl.mean('count_click_to_click').cast(pl.Int32).alias('count_click_to_click'),
         pl.mean('rank_click_to_click').cast(pl.Int32).alias('rank_click_to_click'),
         pl.mean('count_rel_click_to_click').cast(pl.Int32).alias('count_rel_click_to_click'),
@@ -275,7 +274,7 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20) -> Dict:
         ])
 
         if not pred_exists:
-            df.drop(f'pred_{type}')
+            df = df.drop(f'pred_{type}')
 
         r[f'recall_{type}'] = round(df_tmp['TP'].sum() / df_tmp['T'].sum(), 5)
 
@@ -342,17 +341,20 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('max_ts_session') - pl.col('max_ts_aid_carts')).alias('since_ts_aid_carts'),
         (pl.col('max_ts_session') - pl.col('max_ts_aid_orders')).alias('since_ts_aid_orders'),
     ])
+    df = df.drop(['max_ts_session', 'max_ts_aid', 'max_ts_aid_clicks', 'max_ts_aid_carts', 'max_ts_aid_orders'])
 
     # add info about sources of candidates
     df = df.with_columns([
         (pl.col('n_aid_next_is_aid') > 0).cast(pl.Int8).alias('src_self'),
+        (pl.col('n_aid_clicks') * pl.col('count_click_to_click') > 0).cast(pl.Int8).alias('src_click_to_click'),
         (pl.col('n_aid_clicks') * pl.col('count_click_to_cart_or_buy') > 0).cast(pl.Int8).alias('src_click_to_cart_or_buy'),
         (pl.col('n_aid_carts') * pl.col('count_cart_to_cart') > 0).cast(pl.Int8).alias('src_cart_to_cart'),
         (pl.col('n_aid_orders') * pl.col('count_buy_to_buy') > 0).cast(pl.Int8).alias('src_buy_to_buy'),
+        (pl.col('n_w2vec_all') > 0).cast(pl.Int8).alias('src_w2vec_all'),
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_1_2'),
-        (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_all'),
     ])
-    df = df.with_column(pl.col('^src_').fill_null(pl.lit(0)))
+    df = df.drop(['n_aid_next_is_aid'])
+    df = df.with_column(pl.col([col for col in df.columns if 'src_' in col]).fill_null(pl.lit(0)))
 
     # replace NULLs with -1
     df = df.with_column(pl.col(df.columns).fill_null(pl.lit(-1)))
