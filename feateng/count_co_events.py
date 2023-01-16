@@ -11,7 +11,7 @@ from pathlib import Path
 import argparse
 import config
 
-log = logging.getLogger()
+log = logging.getLogger('count_co_events.py')
 
 
 def self_merge(df_part: pl.DataFrame):
@@ -38,7 +38,7 @@ def self_merge(df_part: pl.DataFrame):
     return df_part_merged
 
 
-def self_merge_big_df(df: pl.DataFrame, n_sessions_in_part = 10000):
+def self_merge_big_df(df: pl.DataFrame, n_sessions_in_part: int = 10_000):
     # iterate over parts, self merge smaller parts
     sessions = df['session'].unique()
     n_sessions = len(sessions)
@@ -66,7 +66,7 @@ def count_co_events(df_merged: pl.DataFrame) -> Dict['str', pl.DataFrame]:
         count_click_to_click = df_merged\
             .filter((pl.col('type') == 0)
                     & (pl.col('type_next') == 0)
-                    & (pl.col('time_to_next') <= config.MAX_TIME_TO_NEXT_CLICK_TO_CLICK))\
+                    & (pl.col('time_to_next').abs() <= config.MAX_TIME_TO_NEXT_CLICK_TO_CLICK))\
             .groupby(['aid', 'aid_next'])\
             .agg([pl.col('aid_next').count().alias('count'),])
         counts_co_events['count_click_to_click'] = count_click_to_click
@@ -127,84 +127,124 @@ def count_co_events_all_files(dir_sessions, dir_stats, skip_if_exists=True):
             counts_co_events[name_df].write_parquet(file_name_out)
 
 
-def reduce_size_of_df_with_counts(df_tmp, max_rows_allowed):
-    # reduce size and memory usage to be able to do groupby on the concatenated data frame
-    min_count = 2
-    while df_tmp.shape[0] > max_rows_allowed:
-        df_tmp = df_tmp.filter((pl.col('count') >= min_count))
-        min_count += 1
-    return df_tmp
-
-
 def concat_files_w_stats(name, dir_stats, files_stats=None):
-    rows_chunk = config.OPTIM_ROWS_POLARS_GROUPBY
+    log.debug(f'merge and aggregate counts for {name}')
 
     if files_stats is not None:
         df = pl.concat([pl.read_parquet(f) for f in files_stats])
     else:
         df = pl.read_parquet(f'{dir_stats}/{name}/*.parquet')
+        # df = pl.read_parquet(f'{dir_stats}/{name}/00000000_00100000.parquet')
+
+    log.debug(f'loaded {df.shape[0]:,} rows in total')
+
+    # this gives error: Process finished with exit code 137 (interrupted by signal 9: SIGKILL)
+    # so I need to do an aggregation by parts and chop some pairs
+    # df = pl.scan_parquet(f'{dir_stats}/{name}/*.parquet')\
+    #     .groupby(['aid', 'aid_next'])\
+    #     .agg([pl.sum('count').alias('count')]) \
+    #     .sort('count', reverse=True) \
+    #     .head(config.MAX_CO_EVENT_PAIRS_TO_SAVE_DISK)\
+    #     .collect()
 
     assert df.columns == ['aid', 'aid_next', 'count']
 
+    # truncate small counts if table is big
+    if 'click_to' in name and df.shape[0] > 100_000_000:
+        df = df.filter((pl.col('count') >= config.MIN_COUNT_IN_PART.get(name, 1)))
+
     # groupby by parts if data frame is too big
-    if df.shape[0] > rows_chunk:
+    if df.shape[0] > config.MAX_ROWS_POLARS_GROUPBY:
+        rows_part = config.OPTIM_ROWS_POLARS_GROUPBY
+        n_parts = math.ceil(df.shape[0] / rows_part)
+        max_rows_part = int(config.MAX_ROWS_POLARS_GROUPBY / df.shape[0] * rows_part)
+        rows_part = math.ceil(df.shape[0] / n_parts)
+
+        log.debug(
+            f'Data frame has {df.shape[0]:,} rows, more than {config.MAX_ROWS_POLARS_GROUPBY:,} '
+            f'- maximum supported for aggregation. It needs to be sliced to {n_parts} parts of '
+            f'{rows_part:,} and aggregated by parts. Each part then is to be truncated to max {max_rows_part:,} '
+            f'rows, so that the final table has less than {config.MAX_ROWS_POLARS_GROUPBY:,}, because it will be '
+            f'aggregated again.'
+        )
+
         list_df_parts = []
-        n_parts = math.ceil(df.shape[0] / rows_chunk)
-        for i in range(n_parts):
-            df_part = df.slice(i * rows_chunk, rows_chunk)
-            df_part = df_part.groupby(['aid', 'aid_next']).sum()
-            reduce_size_of_df_with_counts(df_part, config.MAX_ROWS_POLARS_GROUPBY / rows_chunk)
+
+        for i in tqdm(range(n_parts), desc='slice> agg > trunc', total=n_parts, unit='part'):
+            df_part = df\
+                .slice(i * rows_part, rows_part)\
+                .groupby(['aid', 'aid_next'])\
+                .sum() \
+                .filter((pl.col('count') >= config.MIN_COUNT_IN_PART.get(name, 1))) \
+                .sort(['count'], reverse=True)\
+                .head(max_rows_part)
             list_df_parts.append(df_part)
 
+        del df
         df = pl.concat(list_df_parts)
+        del list_df_parts
+        log.debug(f'{df.shape[0]:,} rows after concatenation of parts')
 
     df = df.groupby(['aid', 'aid_next']).sum()
-    # df = df.groupby(['aid', 'aid_next']).agg([pl.sum('count').alias('count'), ])
-    df = df \
+    log.debug(f'{df.shape[0]:,} rows after aggregation')
+
+    df = df\
         .filter((pl.col('count') >= config.MIN_COUNT_TO_SAVE.get(name, 1))) \
-        .sort(['count'], reverse=True)
-    df = df.head(config.MAX_CO_EVENT_PAIRS_TO_SAVE_DISK)
-    df.with_column(pl.col('count').cast(pl.Int32))
+        .sort(['count'], reverse=True) \
+        .head(config.MAX_CO_EVENT_PAIRS_TO_SAVE_DISK) \
+        .with_column(pl.col('count').cast(pl.Int32))
+    log.debug(f'{df.shape[0]:,} rows after filtering and chopping to first '
+              f'{config.MAX_CO_EVENT_PAIRS_TO_SAVE_DISK:,} rows with most counts')
+
     df.to_pandas().to_parquet(f'{dir_stats}/{name}.parquet')  # save as panda so PyCharm can glimpse into it
+
+    log.debug(f'df saved to {dir_stats}/{name}.parquet')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dir_sessions_train', default='../data/train-test-parquet/train_sessions')
-    parser.add_argument('--dir_sessions_test', default='../data/train-test-parquet/test_sessions')
-    parser.add_argument('--dir_stats', default='../data/train-test-counts-co-event')
-    parser.add_argument('--count', default=True)
-    parser.add_argument('--merge', default=True)
+    parser.add_argument('--data_split_alias', default='train-test')
+    parser.add_argument('--count', default=False)
+    parser.add_argument('--merge', default=False)
     parser.add_argument('--merge_train_test', default=True)
     args = parser.parse_args()
 
-    folder_sessions_train = Path(args.dir_sessions_train).stem
-    folder_sessions_test = Path(args.dir_sessions_test).stem
+    dir_sessions_train = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/train_sessions'
+    dir_sessions_test = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
+    dir_stats = f'{config.DIR_DATA}/{args.data_split_alias}-counts-co-event'
+    folder_sessions_train = Path(dir_sessions_train).stem
+    folder_sessions_test = Path(dir_sessions_test).stem
     tic_start = time.time()
 
     if args.count:
-        log.info('count co-events per parquet file (parts)')
-        count_co_events_all_files(args.dir_sessions_train, f'{args.dir_stats}/{folder_sessions_train}')
-        count_co_events_all_files(args.dir_sessions_test, f'{args.dir_stats}/{folder_sessions_test}')
+        log.info('count co-events per parquet file (parts) - ETA 20min')
+        tic = time.time()
+        count_co_events_all_files(dir_sessions_train, f'{dir_stats}/{folder_sessions_train}')
+        count_co_events_all_files(dir_sessions_test, f'{dir_stats}/{folder_sessions_test}')
+        log.info(f'count - time elapsed: '
+                 f'{time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
 
     if args.merge:
-        log.info('merge parts with counts and re-compute counts')
+        log.info('merge parts with counts and aggregate - ETA 30min')
+        tic = time.time()
         for name in config.CO_EVENTS_TO_COUNT:
-            concat_files_w_stats(name, f'{args.dir_stats}/{folder_sessions_train}')
-            concat_files_w_stats(name, f'{args.dir_stats}/{folder_sessions_test}')
+            concat_files_w_stats(name, f'{dir_stats}/{folder_sessions_train}')
+            concat_files_w_stats(name, f'{dir_stats}/{folder_sessions_test}')
+        log.info(f'merge - time elapsed: '
+                 f'{time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
 
     if args.merge_train_test:
-        log.info('merge train and test counts and re-compute counts')
-        tic = time.time()
+        log.info('merge train and test counts and aggregate')
         for name in config.CO_EVENTS_TO_COUNT:
             concat_files_w_stats(
                 name=name,
-                files_stats=[f'{args.dir_stats}/{folder_sessions_train}/{name}.parquet',
-                             f'{args.dir_stats}/{folder_sessions_test}/{name}.parquet'],
-                dir_stats=args.dir_stats,
+                files_stats=[f'{dir_stats}/{folder_sessions_train}/{name}.parquet',
+                             f'{dir_stats}/{folder_sessions_test}/{name}.parquet'],
+                dir_stats=dir_stats,
             )
-        toc = time.time()
-        print('merge - total time elapsed:', toc - tic)
+
+    log.info(f'count_co_events.py - total time elapsed: '
+             f'{time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic_start))}')
 
 
 
