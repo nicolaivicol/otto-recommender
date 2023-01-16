@@ -77,7 +77,7 @@ def get_pairs_for_all_co_event_types_for_aids(
             df_pairs = get_pairs_co_event_type(df_aids, pairs_co_events[count_type], config.MAP_NAME_COUNT_TYPE[count_type][0])
             lst.append(df_pairs)
 
-        df_pairs_co_count = pl.concat(lst).unique() # all pairs from all counted co-events
+        df_pairs_co_count = pl.concat(lst).unique()  # all pairs from all counted co-events
         return df_pairs_co_count
 
 
@@ -97,8 +97,7 @@ def compute_session_stats(df_test: pl.DataFrame):
               pl.min('ts').alias('min_ts_session'),
               pl.max('ts').alias('max_ts_session'),
               ]) \
-        .with_columns([(pl.col('max_ts_session') - pl.col('min_ts_session')).alias('duration_session')]) \
-        .drop(['min_ts_session'])
+        .with_columns([(pl.col('max_ts_session') - pl.col('min_ts_session')).alias('duration_session')])
     return df_session
 
 
@@ -302,6 +301,12 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20) -> Dict:
     # {'recall_clicks': 0.53096, 'recall_carts': 0.46004, 'recall_orders': 0.6705, 'recall': 0.59341}
     # {'recall_clicks': 0.53178, 'recall_carts': 0.47703, 'recall_orders': 0.67849, 'recall': 0.60338}
 
+    # kaggle:
+    # https://www.kaggle.com/competitions/otto-recommender-system/discussion/370116
+    # for 200 candidates
+    # clicks recall = 0.58486 carts recall = 0.49270 orders recall = 0.69467
+    # clicks recall = 0.6506179886006195 carts recall = 0.527631391786734 orders recall = 0.7216145392798664
+
     return r
 
 
@@ -355,6 +360,21 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     ])
     df = df.drop(['n_aid_next_is_aid'])
     df = df.with_column(pl.col([col for col in df.columns if 'src_' in col]).fill_null(pl.lit(0)))
+
+    # add more features
+    # action_num_reverse_chrono 0.658588344124041
+    # aid 0.11817917885568481
+    # sec_since_session_start 0.07308456404382999
+    # session_length 0.0486059102181944
+    # relative_position_in_session 0.04306810550235335
+    # type_weighted_log_recency_score 0.0403055170220625
+    # type 0.011932710447021396
+    # log_recency_score 0.0028580939171428945
+    # aid_clicked_count 0.002075661636954335
+    # aid_carted_count 0.0013019142327152986
+    # aid_ordered_count 0.0
+    # aid_seen_by_type_count 0.0
+    # aid_seen_count 0.0
 
     # replace NULLs with -1
     df = df.with_column(pl.col(df.columns).fill_null(pl.lit(-1)))
