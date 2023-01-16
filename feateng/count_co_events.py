@@ -204,8 +204,8 @@ def concat_files_w_stats(name, dir_stats, files_stats=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
-    parser.add_argument('--count', default=False)
-    parser.add_argument('--merge', default=False)
+    parser.add_argument('--count', default=True)
+    parser.add_argument('--merge', default=True)
     parser.add_argument('--merge_train_test', default=True)
     args = parser.parse_args()
 
