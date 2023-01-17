@@ -74,7 +74,7 @@ def load_sessions_as_sentences(files_or_dirs: Union[str, List[str]], types: List
 
 
 def get_model_file(model_name):
-    return f'{config.DIR_ARTIFACTS}/{model_name}.model'
+    return f'{config.DIR_ARTIFACTS}/wor2vec/{model_name}.model'
 
 
 def load_w2vec_model(model_name) -> Word2Vec:
@@ -240,6 +240,8 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
 
 
 if __name__ == '__main__':
+    # Train all models from config
+    os.makedirs(f'{config.DIR_ARTIFACTS}/wor2vec', exist_ok=True)
     for model_name in config.W2VEC_MODELS.keys():
         logger.info(f'train word2vec model \'{model_name}\' to generate embeddings, '
                     f'then retrieve top-k nearest AIDs after indexing the embeddings.')
