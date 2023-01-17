@@ -4,3 +4,4 @@ artifacts/
 **/.ipynb_checkpoints
 .pytest_cache
 .venv*
+dask-worker-space/

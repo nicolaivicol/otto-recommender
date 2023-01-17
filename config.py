@@ -37,29 +37,36 @@ ID2TYPE = {0: 'clicks', 1: 'carts', 2: 'orders'}
 # filter co-events when doing self merge
 MIN_TIME_TO_NEXT = -24 * 60 * 60  # value zero means that next event can't be before this event
 MAX_TIME_TO_NEXT = 24 * 60 * 60  # 24 hours * 60 min * 60 sec
-MAX_TIME_TO_NEXT_CLICK_TO_CLICK = 12 * 60 * 60  # 12 hours * 60 min * 60 sec
+MAP_MAX_TIME_TO_NEXT = {
+    'click_to_click': 12 * 60 * 60,  # 12 hours * 60 min * 60 sec
+    'click_to_cart_or_buy': MAX_TIME_TO_NEXT,
+    'cart_to_cart': MAX_TIME_TO_NEXT,
+    'cart_to_buy': MAX_TIME_TO_NEXT,
+    'buy_to_buy': MAX_TIME_TO_NEXT,
+}
+
 
 OPTIM_ROWS_POLARS_GROUPBY = 100_000_000
 MAX_ROWS_POLARS_GROUPBY = 300_000_000
 
 # minimum count to be saved on disk
 MIN_COUNT_TO_SAVE = {
-    'count_click_to_click': 10,
-    'count_click_to_cart_or_buy': 5,
-    'count_cart_to_cart': 2,
-    'count_cart_to_buy': 2,
-    'count_buy_to_buy': 2,
+    'click_to_click': 10,
+    'click_to_cart_or_buy': 5,
+    'cart_to_cart': 2,
+    'cart_to_buy': 2,
+    'buy_to_buy': 2,
 }
-MIN_COUNT_IN_PART = {'count_click_to_click': 2, 'count_click_to_cart_or_buy': 2}
+MIN_COUNT_IN_PART = {'click_to_click': 2, 'click_to_cart_or_buy': 2}
 MAX_CO_EVENT_PAIRS_TO_SAVE_DISK = 300_000_000
 
 # which counts to compute
 CO_EVENTS_TO_COUNT = [
-    'count_click_to_click',
-    'count_click_to_cart_or_buy',
-    'count_cart_to_cart',
-    'count_cart_to_buy',
-    'count_buy_to_buy',
+    'click_to_click',
+    'click_to_cart_or_buy',
+    'cart_to_cart',
+    'cart_to_buy',
+    'buy_to_buy',
 ]
 
 # RETRIEVAL
@@ -90,7 +97,7 @@ RETRIEVAL_CO_COUNTS_TO_JOIN = [
     'click_to_click',
     'click_to_cart_or_buy',
     'cart_to_cart',
-    # 'cart_to_buy',
+    'cart_to_buy',
     'buy_to_buy',
 ]
 
