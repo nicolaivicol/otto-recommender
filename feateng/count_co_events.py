@@ -60,47 +60,20 @@ def self_merge_big_df(df: pl.DataFrame, n_sessions_in_part: int = 10_000):
 def count_co_events(df_merged: pl.DataFrame) -> Dict['str', pl.DataFrame]:
     log.debug(f'compute_co_events(): input to has {df_merged.shape} rows')
     counts_co_events = {}
-    co_events_to_count = config.CO_EVENTS_TO_COUNT
 
-    if 'count_click_to_click' in co_events_to_count:
-        count_click_to_click = df_merged\
-            .filter((pl.col('type') == 0)
-                    & (pl.col('type_next') == 0)
-                    & (pl.col('time_to_next').abs() <= config.MAX_TIME_TO_NEXT_CLICK_TO_CLICK))\
-            .groupby(['aid', 'aid_next'])\
-            .agg([pl.col('aid_next').count().alias('count'),])
-        counts_co_events['count_click_to_click'] = count_click_to_click
-
-    if 'count_click_to_cart_or_buy' in co_events_to_count:
-        count_click_to_cart_or_buy = df_merged\
-            .filter((pl.col('type') == 0) & (pl.col('type_next').is_in([1, 2])))\
-            .groupby(['aid', 'aid_next'])\
-            .agg([pl.col('aid_next').count().alias('count'),])
-        counts_co_events['count_click_to_cart_or_buy'] = count_click_to_cart_or_buy
-
-    if 'count_cart_to_buy' in co_events_to_count:
-        count_cart_to_buy = df_merged\
-            .filter((pl.col('type') == 1) & (pl.col('type_next') == 2))\
-            .groupby(['aid', 'aid_next'])\
-            .agg([pl.col('aid_next').count().alias('count'),])
-        counts_co_events['count_cart_to_buy'] = count_cart_to_buy
-
-    if 'count_cart_to_cart' in co_events_to_count:
-        count_cart_to_cart = df_merged\
-            .filter((pl.col('type') == 1) & (pl.col('type_next') == 1))\
-            .groupby(['aid', 'aid_next'])\
-            .agg([pl.col('aid_next').count().alias('count'),])
-        counts_co_events['count_cart_to_cart'] = count_cart_to_cart
-
-    if 'count_buy_to_buy' in co_events_to_count:
-        count_buy_to_buy = df_merged\
-            .filter((pl.col('type') == 2) & (pl.col('type_next') == 2))\
-            .groupby(['aid', 'aid_next'])\
-            .agg([pl.col('aid_next').count().alias('count'),])
-        counts_co_events['count_buy_to_buy'] = count_buy_to_buy
+    for count_type, map_this_next in config.MAP_NAME_COUNT_TYPE.items():
+        type_this, types_next = map_this_next
+        df_tmp = df_merged \
+            .filter((pl.col('type') == type_this)
+                    & (pl.col('type_next').is_in(types_next))
+                    & (pl.col('time_to_next').abs() <= config.MAP_MAX_TIME_TO_NEXT['count_type'])) \
+            .groupby(['aid', 'aid_next']) \
+            .agg([pl.col('aid_next').count().alias('count')])
+        counts_co_events[count_type] = df_tmp
 
     log.debug(f'compute_co_events(): output size '
               f'{json.dumps({name: df.shape[0] for name, df in counts_co_events.items()})}')
+
     return counts_co_events
 
 
@@ -124,7 +97,7 @@ def count_co_events_all_files(dir_sessions, dir_stats, skip_if_exists=True):
         for name_df, df in counts_co_events.items():
             file_name_out = f'{dir_stats}/{name_df}/{Path(file_parquet).stem}.parquet'
             os.makedirs(os.path.dirname(file_name_out), exist_ok=True)
-            counts_co_events[name_df].write_parquet(file_name_out)
+            df.write_parquet(file_name_out)
 
 
 def concat_files_w_stats(name, dir_stats, files_stats=None):
