@@ -18,6 +18,8 @@ beartype  # to match the requirements in recsys-dataset project and run testset.
 fastparquet
 polars
 pyarrow
+dask
 gensim
 faiss
+bokeh>=2.1.1
 # annoy  # fails installation

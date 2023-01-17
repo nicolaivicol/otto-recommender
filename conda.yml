@@ -16,6 +16,7 @@ dependencies:
   - tqdm
   - more-itertools
   - plotly
+  - matplotlib
   - tabulate
   - notebook
   - jupyter
@@ -25,7 +26,9 @@ dependencies:
   - fastparquet
   - polars
   - pyarrow
+  - dask
   # - cudf
   - gensim
   - faiss
   - annoy
+  - bokeh>=2.1.1
