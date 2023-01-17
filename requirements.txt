@@ -8,6 +8,7 @@ boto3
 tqdm
 more-itertools
 plotly
+matplotlib
 tabulate
 notebook
 jupyter
