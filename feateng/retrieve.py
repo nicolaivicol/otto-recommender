@@ -20,28 +20,42 @@ def get_df_count_for_co_event_type(count_type: str, dir_counts: str,  first_n: i
     :param count_type: count type, e.g. 'buy_to_buy', 'click_to_click'
     :param first_n: take first N pairs to retrieve
     :param dir_counts: dir with parquet files that contain co-event counts
-    :return: pl.DataFrame(['aid', 'aid_next', 'count', 'count_rel', 'rank'])
+    :return: pl.DataFrame(['aid', 'aid_next', 'count', 'count_pop', 'perc', 'rank', 'count_rel'])
     """
     if first_n is None:
         first_n = config.RETRIEVAL_FIRST_N_CO_COUNTS[count_type]
 
-    df_count = pl.read_parquet(f'{dir_counts}/count_{count_type}.parquet')
+    df_count = pl.read_parquet(f'{dir_counts}/{count_type}.parquet')
+
+    # over entire population
     df_count = df_count \
-        .rename({'count': f'count_{count_type}'}) \
+        .with_column((((pl.col('count') - pl.min('count')) / (pl.quantile('count', 0.9999) - pl.min('count')))
+                      .clip_max(1) * 10_000).cast(pl.Int16).alias(f'{count_type}_count_pop')) \
+        .with_row_count(offset=1) \
+        .with_column((pl.col('row_nr') / pl.count() * 10_000).cast(pl.Int16).alias(f'{count_type}_perc_pop')) \
+        .drop(f'row_nr')
+
+    # over pairs
+    df_count = df_count \
         .sort(['aid']) \
         .select([pl.all(),  # select all column from the original df
-                 pl.col(f'count_{count_type}').rank('ordinal', reverse=True).over('aid').alias(f'rank_{count_type}'),
-                 pl.col(f'count_{count_type}').max().over('aid').alias('max_count'),
+                 pl.col('count').rank('ordinal', reverse=True).over('aid').cast(pl.Int16).alias(f'{count_type}_rank'),
+                 pl.col('count').max().over('aid').alias('max_count'),
                  ]) \
-        .filter(pl.col(f'rank_{count_type}') <= first_n) \
+        .filter(pl.col(f'{count_type}_rank') <= first_n) \
         .with_columns(
-        [(pl.col(f'count_{count_type}') / pl.col('max_count') * 100).cast(pl.Int8).alias(f'count_rel_{count_type}')]) \
-        .drop(['max_count'])
+            [(pl.col('count') / pl.col('max_count') * 100).cast(pl.Int8).alias(f'{count_type}_count_rel')]) \
+        .drop(['max_count']) \
+        .rename({'count': f'{count_type}_count'})
+
     return df_count
 
 
 def get_pairs_for_all_co_event_types(dir_counts) -> Dict[str, pl.DataFrame]:
-    """ Get all available pairs from data frames with co-event counts for all types """
+    """
+    Get all available pairs from data frames with co-event counts for all types
+    + features derived from co-counts
+    """
     return {type_count: get_df_count_for_co_event_type(type_count, dir_counts)
             for type_count in config.RETRIEVAL_CO_COUNTS_TO_JOIN}
 
@@ -204,8 +218,7 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
     cols_after_remove_aid.remove('aid')
     # df0 = df.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
 
-    df = df.groupby(['session', 'aid_next']) \
-        .agg([
+    aggs_events_session = [
         pl.count().cast(pl.Int16).alias('n_uniq_aid'),
         (pl.col('n_aid_clicks') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_clicks'),
         (pl.col('n_aid_carts') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_carts'),
@@ -222,22 +235,24 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.max('max_ts_aid_carts').cast(pl.Int32).alias('max_ts_aid_carts'),
         pl.max('max_ts_aid_orders').cast(pl.Int32).alias('max_ts_aid_orders'),
 
-        pl.mean('count_click_to_click').cast(pl.Int32).alias('count_click_to_click'),
-        pl.mean('rank_click_to_click').cast(pl.Int16).alias('rank_click_to_click'),
-        pl.mean('count_rel_click_to_click').cast(pl.Int16).alias('count_rel_click_to_click'),
+        pl.mean('max_ts_aid').cast(pl.Int32).alias('mean_max_ts_aid'),
+        pl.mean('max_ts_aid_orders').cast(pl.Int32).alias('mean_max_ts_aid_orders'),
+    ]
 
-        pl.mean('count_click_to_cart_or_buy').cast(pl.Int32).alias('count_click_to_cart_or_buy'),
-        pl.mean('rank_click_to_cart_or_buy').cast(pl.Int16).alias('rank_click_to_cart_or_buy'),
-        pl.mean('count_rel_click_to_cart_or_buy').cast(pl.Int16).alias('count_rel_click_to_cart_or_buy'),
+    # counts of co-events
+    aggs_counts_co_events = []
+    for count_type in config.RETRIEVAL_CO_COUNTS_TO_JOIN:
+        # add counts
+        aggs_counts_co_events.append(pl.sum(f'{count_type}_count').cast(pl.Int32).alias(f'{count_type}_count'))
+        # add features weighted by counts
+        for feat in ['count_pop', 'perc_pop', 'rank', 'count_rel']:
+            aggs_counts_co_events.extend([
+                ((pl.col(f'{count_type}_{feat}') * pl.col(f'{count_type}_count')).sum() /
+                 pl.col(f'{count_type}_count').sum()).cast(pl.Int16).alias(f'{count_type}_{feat}'),
+            ])
 
-        pl.mean('count_cart_to_cart').cast(pl.Int32).alias('count_cart_to_cart'),
-        pl.mean('rank_cart_to_cart').cast(pl.Int16).alias('rank_cart_to_cart'),
-        pl.mean('count_rel_cart_to_cart').cast(pl.Int16).alias('count_rel_cart_to_cart'),
-
-        pl.mean('count_buy_to_buy').cast(pl.Int32).alias('count_buy_to_buy'),
-        pl.mean('rank_buy_to_buy').cast(pl.Int16).alias('rank_buy_to_buy'),
-        pl.mean('count_rel_buy_to_buy').cast(pl.Int16).alias('count_rel_buy_to_buy'),
-
+    # w2vec
+    aggs_w2vec = [
         (pl.col('rank_w2vec_all') > 0).sum().cast(pl.Int16).alias('n_w2vec_all'),
         pl.mean('dist_w2vec_all').cast(pl.Int32).alias('dist_w2vec_all'),
         pl.mean('rank_w2vec_all').cast(pl.Int16).alias('rank_w2vec_all'),
@@ -247,8 +262,10 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.mean('dist_w2vec_1_2').cast(pl.Int32).alias('dist_w2vec_1_2'),
         pl.mean('rank_w2vec_1_2').cast(pl.Int16).alias('rank_w2vec_1_2'),
         pl.min('rank_w2vec_1_2').cast(pl.Int16).alias('best_rank_w2vec_1_2'),
+    ]
 
-    ])
+    df = df.groupby(['session', 'aid_next']).agg(aggs_events_session + aggs_counts_co_events + aggs_w2vec)
+
     # df1 = df.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
     assert all([c in df.columns for c in cols_after_remove_aid])
     return df
@@ -301,6 +318,9 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20) -> Dict:
     # {'recall_clicks': 0.53096, 'recall_carts': 0.46004, 'recall_orders': 0.6705, 'recall': 0.59341}
     # {'recall_clicks': 0.53178, 'recall_carts': 0.47703, 'recall_orders': 0.67849, 'recall': 0.60338}
 
+    # ver 4: 2023-01-17 01:37
+    # {"recall_clicks": 0.5454, "recall_carts": 0.48396, "recall_orders": 0.6868, "recall": 0.61181}
+
     # kaggle:
     # https://www.kaggle.com/competitions/otto-recommender-system/discussion/370116
     # for 200 candidates
@@ -345,16 +365,34 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('max_ts_session') - pl.col('max_ts_aid_clicks')).alias('since_ts_aid_clicks'),
         (pl.col('max_ts_session') - pl.col('max_ts_aid_carts')).alias('since_ts_aid_carts'),
         (pl.col('max_ts_session') - pl.col('max_ts_aid_orders')).alias('since_ts_aid_orders'),
+
+        (pl.col('max_ts_aid') - pl.col('min_ts_session')).alias('since_session_start_ts_aid'),
+        (pl.col('max_ts_aid_orders') - pl.col('min_ts_session')).alias('since_session_start_ts_aid_orders'),
+
+        ((pl.col('max_ts_aid') - pl.col('min_ts_session'))
+         / (pl.col('max_ts_session') - pl.col('min_ts_session') + 1) * 100
+         ).cast(pl.Int8).alias('rel_pos_max_ts_aid_in_session'),
+
+        ((pl.col('mean_max_ts_aid') - pl.col('min_ts_session'))
+         / (pl.col('max_ts_session') - pl.col('min_ts_session') + 1) * 100
+         ).cast(pl.Int8).alias('rel_pos_mean_max_ts_aid_in_session'),
+
+        ((pl.col('mean_max_ts_aid_orders') - pl.col('min_ts_session'))
+         / (pl.col('max_ts_session') - pl.col('min_ts_session') + 1) * 100
+         ).cast(pl.Int8).alias('rel_pos_mean_max_ts_aid_orders_in_session'),
     ])
-    df = df.drop(['max_ts_session', 'max_ts_aid', 'max_ts_aid_clicks', 'max_ts_aid_carts', 'max_ts_aid_orders'])
+    df = df.drop(['min_ts_session', 'max_ts_session', 'max_ts_aid', 'max_ts_aid_clicks', 'max_ts_aid_carts',
+                  'max_ts_aid_orders', 'mean_max_ts_aid', 'mean_max_ts_aid_orders'])
 
     # add info about sources of candidates
     df = df.with_columns([
+        pl.lit(1).cast(pl.Int8).alias('src_any'),
         (pl.col('n_aid_next_is_aid') > 0).cast(pl.Int8).alias('src_self'),
-        (pl.col('n_aid_clicks') * pl.col('count_click_to_click') > 0).cast(pl.Int8).alias('src_click_to_click'),
-        (pl.col('n_aid_clicks') * pl.col('count_click_to_cart_or_buy') > 0).cast(pl.Int8).alias('src_click_to_cart_or_buy'),
-        (pl.col('n_aid_carts') * pl.col('count_cart_to_cart') > 0).cast(pl.Int8).alias('src_cart_to_cart'),
-        (pl.col('n_aid_orders') * pl.col('count_buy_to_buy') > 0).cast(pl.Int8).alias('src_buy_to_buy'),
+        (pl.col('n_aid_clicks') * pl.col('click_to_click_count') > 0).cast(pl.Int8).alias('src_click_to_click'),
+        (pl.col('n_aid_clicks') * pl.col('click_to_cart_or_buy_count') > 0).cast(pl.Int8).alias('src_click_to_cart_or_buy'),
+        (pl.col('n_aid_carts') * pl.col('cart_to_cart_count') > 0).cast(pl.Int8).alias('src_cart_to_cart'),
+        (pl.col('n_aid_carts') * pl.col('cart_to_buy_count') > 0).cast(pl.Int8).alias('src_cart_to_buy'),
+        (pl.col('n_aid_orders') * pl.col('buy_to_buy_count') > 0).cast(pl.Int8).alias('src_buy_to_buy'),
         (pl.col('n_w2vec_all') > 0).cast(pl.Int8).alias('src_w2vec_all'),
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_1_2'),
     ])
@@ -364,25 +402,18 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     # add more features
     # action_num_reverse_chrono 0.658588344124041
     # aid 0.11817917885568481
-    # sec_since_session_start 0.07308456404382999
-    # session_length 0.0486059102181944
     # relative_position_in_session 0.04306810550235335
     # type_weighted_log_recency_score 0.0403055170220625
-    # type 0.011932710447021396
     # log_recency_score 0.0028580939171428945
-    # aid_clicked_count 0.002075661636954335
-    # aid_carted_count 0.0013019142327152986
-    # aid_ordered_count 0.0
-    # aid_seen_by_type_count 0.0
-    # aid_seen_count 0.0
 
     # replace NULLs with -1
-    df = df.with_column(pl.col(df.columns).fill_null(pl.lit(-1)))
+    df = df.fill_null(-1)
+    # df = df.with_column(pl.col(df.columns).fill_null(pl.lit(-1)))
 
-    # TODO: add other AIDs per session, based on general popularity
+    # TODO: add new 'next_aid' per session, based on general and doc2vec cluster popularity
     # ...
 
-    # TODO: join general popularity features by 'next_aid'
+    # TODO: join general and doc2vec cluster popularity features by 'next_aid'
     # ...
 
     # join labels for learning
@@ -397,14 +428,22 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
                          right_on=['session', 'aid'],
                          how='outer')
 
-        df = df.with_column(pl.col(['target_clicks', 'target_carts', 'target_orders']).fill_null(pl.lit(0)))
+        cols_target = ['target_clicks', 'target_carts', 'target_orders']
+        cols_src = [c for c in df.columns if 'src_' in c]
+        df = df.with_column(pl.col(cols_target + cols_src).fill_null(0))
+        df = df.fill_null(-1)
 
         recalls_after_retrieval = compute_recall_after_retrieval(df)
         log.debug(json.dumps(recalls_after_retrieval))
 
-    log.info(f'data frame created, {df.shape[0]} rows, {df.shape[1]} columns')
+    log.info(f'Data frame created: {df.shape[0]:,} rows, {df.shape[1]} columns. Saving to: {file_out}')
+
+    df = df.sort('session')  # important
 
     df.write_parquet(file_out)
+
+    if labels_exists:
+        df.filter(pl.col('src_any') == 1).write_parquet(file_out.replace('-retrieved', '-ltr'))
 
     return df
 
@@ -424,6 +463,11 @@ if __name__ == '__main__':
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
     dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved'
     os.makedirs(dir_out, exist_ok=True)
+    os.makedirs(f'{config.DIR_DATA}/{args.data_split_alias}-ltr', exist_ok=True)
+
+    # load pairs by co-event counts
+    dir_counts = f'{config.DIR_DATA}/{args.data_split_alias}-counts-co-event'
+    aid_pairs_co_events = get_pairs_for_all_co_event_types(dir_counts)
 
     # load neighbours by word2vec
     df_knns_w2vec_all = retrieve_w2vec_knns_via_faiss_index(args.w2vec_model_all)\
@@ -431,9 +475,6 @@ if __name__ == '__main__':
 
     df_knns_w2vec_1_2 = retrieve_w2vec_knns_via_faiss_index(args.w2vec_model_1_2)\
         .rename({'dist_w2vec': 'dist_w2vec_1_2', 'rank_w2vec': 'rank_w2vec_1_2'})
-
-    # load pairs by co-event counts
-    aid_pairs_co_events = get_pairs_for_all_co_event_types(f'{config.DIR_DATA}/{args.data_split_alias}-counts-co-event')
 
     files_sessions = sorted(glob.glob(f'{dir_sessions}/*.parquet'))
 
