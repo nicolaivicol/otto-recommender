@@ -41,14 +41,14 @@ PARAMS_LGBM = {
     'objective': 'lambdarank',
     'boosting_type': 'gbdt',
     'metric': 'ndcg',
-    'n_estimators': 300,
-    'learning_rate': 0.05,
+    'n_estimators': 250,
+    'learning_rate': 0.10,
     'max_depth': 4,
     'num_leaves': 15,
     'colsample_bytree': 0.50,  # aka feature_fraction
     'subsample': 0.50,  # aka bagging_fraction
     # 'bagging_freq': 1,
-    'min_child_samples': 1,  # aka min_data_in_leaf  ? read github link with test
+    'min_child_samples': 20,  # aka min_data_in_leaf  ? read github link with test
     'importance_type': 'gain',
     'seed': 42,
 }
@@ -80,7 +80,6 @@ if __name__ == "__main__":
     X_valid = df_valid.select(feats).to_pandas().values
     y_valid = df_valid['target_clicks'].to_numpy()
     qids_valid = df_valid.groupby('session', maintain_order=True).agg([pl.count('aid_next').alias('n')])['n'].to_numpy()
-
 
     # group_column
     # train.txt train.txt.query
