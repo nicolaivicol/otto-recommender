@@ -74,7 +74,7 @@ def load_sessions_as_sentences(files_or_dirs: Union[str, List[str]], types: List
 
 
 def get_model_file(model_name):
-    return f'{config.DIR_ARTIFACTS}/wor2vec/{model_name}.model'
+    return f'{config.DIR_ARTIFACTS}/word2vec/{model_name}.model'
 
 
 def load_w2vec_model(model_name) -> Word2Vec:
