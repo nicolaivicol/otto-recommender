@@ -14,7 +14,7 @@ from dask.distributed import Client, LocalCluster
 from psutil import virtual_memory, cpu_count
 
 import config
-from utils import set_display_options, describe_numeric
+from utils import set_display_options
 
 set_display_options()
 log = logging.getLogger(os.path.basename(__file__))
@@ -214,7 +214,7 @@ def get_file_name(dir_out, target, data_split_alias, **kwargs):
     return file_name
 
 
-def split_files_to_train_valid(files, valid_frac, max_files_to_use):
+def split_files_to_train_valid(files, valid_frac, max_files_in_train, max_files_in_valid):
     if valid_frac > 0:
         assert valid_frac < 1, 'valid_frac must be < 1'
         assert len(files) >= 2, 'need at least 2 files for train/test split'
@@ -223,10 +223,11 @@ def split_files_to_train_valid(files, valid_frac, max_files_to_use):
     else:
         files_train, files_valid = files, None
 
-    if max_files_to_use is not None:
-        files_train = files_train[:int(max_files_to_use)]
-        if files_valid is not None:
-            files_valid = files_valid[:int(max_files_to_use)]
+    if max_files_in_train is not None:
+        files_train = files_train[:int(max_files_in_train)]
+
+    if max_files_in_valid is not None and files_valid is not None:
+        files_valid = files_valid[:int(max_files_in_valid)]
 
     log.debug(f'{len(files_train)} files selected for train')
 
@@ -248,13 +249,15 @@ if __name__ == "__main__":
     parser.add_argument('--valid_frac', default=0, type=float)  # 0: runs on full data, without validation, 0.30 - 30%
     parser.add_argument('--targets', nargs='+', default=['clicks', 'carts', 'orders'])
     parser.add_argument('--use_dask', default=True, type=bool)
-    parser.add_argument('--max_files_to_use', type=int)
+    parser.add_argument('--max_files_in_train', type=int)
+    parser.add_argument('--max_files_in_valid', type=int)
     args = parser.parse_args()
 
     # args.valid_frac = 0.50
     # args.targets = ['clicks']
     # args.use_dask = True
-    # args.max_files_to_use = 1
+    # args.max_files_in_train = 1
+    # args.max_files_in_valid = 1
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This trains ranker models for clicks/carts/orders. ETA ?min.')
@@ -263,7 +266,7 @@ if __name__ == "__main__":
     files = sorted(glob.glob(f'{dir_retrieved_w_feats}/*.parquet'))
     dir_out = f'{config.DIR_ARTIFACTS}/lgbm'
 
-    files_train, files_valid = split_files_to_train_valid(files, args.valid_frac, args.max_files_to_use)
+    files_train, files_valid = split_files_to_train_valid(files, args.valid_frac, args.max_files_in_train, args.max_files_in_valid)
     dask_client = set_up_dask_client() if args.use_dask else None
 
     for target in args.targets:
