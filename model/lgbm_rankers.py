@@ -245,10 +245,10 @@ def save_feat_imp(lgbm_model, feature_names, file_name):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
-    parser.add_argument('--valid_frac', default=0)  # 0: runs on full data, without validation, 0.30 - 30%
+    parser.add_argument('--valid_frac', default=0, type=float)  # 0: runs on full data, without validation, 0.30 - 30%
     parser.add_argument('--targets', nargs='+', default=['clicks', 'carts', 'orders'])
-    parser.add_argument('--use_dask', default=True)
-    parser.add_argument('--max_files_to_use')
+    parser.add_argument('--use_dask', default=True, type=bool)
+    parser.add_argument('--max_files_to_use', type=int)
     args = parser.parse_args()
 
     # args.valid_frac = 0.50
