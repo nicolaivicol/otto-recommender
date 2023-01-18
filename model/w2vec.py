@@ -12,9 +12,10 @@ from annoy import AnnoyIndex
 import faiss
 
 import config
-from utils import describe_numeric, set_display_options
+from utils import set_display_options
 
 set_display_options()
+log = logging.getLogger(os.path.basename(__file__))
 
 # references:
 # https://www.kaggle.com/code/radek1/word2vec-how-to-training-and-submission
@@ -45,8 +46,6 @@ set_display_options()
 # - compare to top buy-to-buy
 #          aid  time_ann  time_w2vec  time_faiss  time_faiss_ivff  co-countXannoy  co-countXw2vec  co-countXfaiss  co-countXfaiss_ivff  annoyXw2vec  faissXw2vec  faiss_ivffXw2vec  faissXfaiss_ivff
 # 0 926372.715     0.030       0.079       0.074            0.004           0.185           0.263           0.199                0.197        0.379        0.420             0.411             0.980
-
-logger = logging.getLogger('w2vec.py')
 
 
 def load_sessions_lazy(file: str, types: List[int] = None) -> pl.LazyFrame:

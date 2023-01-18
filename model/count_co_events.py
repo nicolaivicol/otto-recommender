@@ -11,7 +11,7 @@ from pathlib import Path
 import argparse
 import config
 
-log = logging.getLogger('count_co_events.py')
+log = logging.getLogger(os.path.basename(__file__))
 
 
 def self_merge(df_part: pl.DataFrame):

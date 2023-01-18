@@ -8,10 +8,10 @@ from tqdm import tqdm
 import argparse
 
 import config
-from feateng.w2vec import retrieve_w2vec_knns_via_faiss_index
-from utils import describe_numeric
+from model.w2vec import retrieve_w2vec_knns_via_faiss_index
 
-log = logging.getLogger('retrieve.py')
+
+log = logging.getLogger(os.path.basename(__file__))
 
 
 def get_df_count_for_co_event_type(count_type: str, dir_counts: str,  first_n: int = None) -> pl.DataFrame:

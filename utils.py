@@ -49,7 +49,7 @@ def set_display_options():
     # pd.set_option('expand_frame_repr', True)
     pd.set_option('display.float_format', lambda x: '%.3f' % x)
     warnings.simplefilter('ignore')
-    display(HTML("<style>.container { width:80% !important; }</style>"))
+    # display(HTML("<style>.container { width:80% !important; }</style>"))
 
 
 # def remove_folder(dir):
