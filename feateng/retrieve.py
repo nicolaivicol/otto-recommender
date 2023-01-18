@@ -443,6 +443,7 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     df.write_parquet(file_out)
 
     if labels_exists:
+        # save data ready for learning-to-rank models (e.g. lightgbm.dask.DaskLGBMRanker)
         df.filter(pl.col('src_any') == 1).write_parquet(file_out.replace('-retrieved', '-ltr'))
 
     return df
