@@ -17,7 +17,7 @@ import config
 from utils import set_display_options, describe_numeric
 
 set_display_options()
-log = logging.getLogger('rank.py')
+log = logging.getLogger(os.path.basename(__file__))
 
 # References:
 # https://medium.datadriveninvestor.com/a-practical-guide-to-lambdamart-in-lightgbm-f16a57864f6
