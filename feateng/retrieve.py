@@ -457,7 +457,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     log.info('Start retrieve.py with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This retrieves candidates and generates features, ETA ~15min.')
+    log.info('This retrieves candidates and generates features, ETA ~20min.')
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
