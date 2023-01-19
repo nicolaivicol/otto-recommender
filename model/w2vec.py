@@ -17,36 +17,6 @@ from utils import set_display_options
 set_display_options()
 log = logging.getLogger(os.path.basename(__file__))
 
-# references:
-# https://www.kaggle.com/code/radek1/word2vec-how-to-training-and-submission
-# https://www.kaggle.com/competitions/otto-recommender-system/discussion/368384
-# https://radimrehurek.com/gensim/auto_examples/tutorials/run_word2vec.html
-# https://radimrehurek.com/gensim/models/word2vec.html
-# https://radimrehurek.com/gensim/auto_examples/tutorials/run_annoy.html
-# https://www.pinecone.io/learn/faiss-tutorial/
-# https://davidefiocco.github.io/nearest-neighbor-search-with-faiss/
-# https://engineering.fb.com/2017/03/29/data-infrastructure/faiss-a-library-for-efficient-similarity-search/
-# https://github.com/spotify/annoy
-# https://jalammar.github.io/illustrated-word2vec/
-
-
-# number of AIDs per session in train/test:
-#               count   mean    std   min    5%   10%   25%   50%    95%     98%     99%     max
-# train: 10584517.000 15.442 29.418 2.000 2.000 2.000 3.000 6.000 62.000 108.000 152.000 498.000
-# test:   1783737.000  4.250  8.388 1.000 1.000 1.000 1.000 2.000 15.000  27.000  38.000 465.000
-#
-# 782842 unique AIDs with 'clicks'
-# 50871 unique AIDs with 'orders'
-
-# word2vec embeddings (all types, size=100, mincount=5, window=10),
-# retrieve top 20 similar with annoy/w2vec/faiss/faiss_ivff
-# - compare to top click-to-click
-#          aid  time_ann  time_w2vec  time_faiss  time_faiss_ivff  co-countXannoy  co-countXw2vec  co-countXfaiss  co-countXfaiss_ivff  annoyXw2vec  faissXw2vec  faiss_ivffXw2vec  faissXfaiss_ivff
-# 0 928838.322     0.064       0.077       0.085            0.006           0.237           0.126           0.245                0.242        0.204        0.256             0.247             0.973
-# - compare to top buy-to-buy
-#          aid  time_ann  time_w2vec  time_faiss  time_faiss_ivff  co-countXannoy  co-countXw2vec  co-countXfaiss  co-countXfaiss_ivff  annoyXw2vec  faissXw2vec  faiss_ivffXw2vec  faissXfaiss_ivff
-# 0 926372.715     0.030       0.079       0.074            0.004           0.185           0.263           0.199                0.197        0.379        0.420             0.411             0.980
-
 
 def load_sessions_lazy(file: str, types: List[int] = None) -> pl.LazyFrame:
     """ Load a lazy data frame without collection/execution """
@@ -89,16 +59,16 @@ def load_w2vec_model(model_name) -> Word2Vec:
 def train_w2vec_model(model_name) -> Word2Vec:
     tic = time.time()
     model_config = config.W2VEC_MODELS[model_name]
-    log.debug(f'training Word2Vec with name=\'{model_name}\' '
-                 f'and config: {json.dumps(model_config, indent=2)}')
+    log.debug(f'train_w2vec_model() - training Word2Vec with name=\'{model_name}\' '
+              f'and config \n: {json.dumps(model_config, indent=2)}')
+
     df_sentences = load_sessions_as_sentences(model_config['dir_sessions'], types=model_config.get('types', None))
     w2vec_model = Word2Vec(sentences=df_sentences['sentence'].to_list(), workers=16, **model_config['params'])
-
-    log.debug(f'time elapsed: {time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
-
     w2vec_model.save(get_model_file(model_name))
     # w2vec_model.wv.save()
-    log.debug(f"model saved to: {get_model_file(model_name)}")
+    log.debug(f'model saved to: {get_model_file(model_name)}')
+    log.debug(f'train_w2vec_model() - completed successfully - '
+              f'time elapsed: {time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
 
     return w2vec_model
 
@@ -182,7 +152,7 @@ def get_top_k_similar_faiss(
         aids_per_sec = aids_per_sec_map[min(int(len(words_q) / 100_000), len(aids_per_sec_map))]
         eta = len(words_q) / aids_per_sec
         msg = (f'ETA is {time.strftime("%Hh %Mmin %Ssec", time.gmtime(eta))} '
-               f'for get_top_k_similar_faiss() on {len(words_q)} words')
+               f'for get_top_k_similar_faiss() on {len(words_q):,} words')
         log.warning(msg)
 
     words_q_embeddings = [map_word_embedding.get(word) for word in words_q]
@@ -239,7 +209,8 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
 
 
 if __name__ == '__main__':
-    log.info('This trains all word2vec models specified in the config.')
+    log.info('This trains all word2vec models specified in the config. '
+             'ETA 65min (43min for one big model using all actions, 22min for one small model using carts+orders).')
     log.info('First, it trains the word2vec model to generate embeddings. '
              'Then it retrieves top-k nearest AIDs after indexing the embeddings.')
     os.makedirs(f'{config.DIR_ARTIFACTS}/word2vec', exist_ok=True)
@@ -251,6 +222,38 @@ if __name__ == '__main__':
         log.info(f'{n_candidates:,} candidates retrieved for {n_aids:,} unique AIDs')
 
 
+# ******************************************************************************
+# references:
+# https://www.kaggle.com/code/radek1/word2vec-how-to-training-and-submission
+# https://www.kaggle.com/competitions/otto-recommender-system/discussion/368384
+# https://radimrehurek.com/gensim/auto_examples/tutorials/run_word2vec.html
+# https://radimrehurek.com/gensim/models/word2vec.html
+# https://radimrehurek.com/gensim/auto_examples/tutorials/run_annoy.html
+# https://www.pinecone.io/learn/faiss-tutorial/
+# https://davidefiocco.github.io/nearest-neighbor-search-with-faiss/
+# https://engineering.fb.com/2017/03/29/data-infrastructure/faiss-a-library-for-efficient-similarity-search/
+# https://github.com/spotify/annoy
+# https://jalammar.github.io/illustrated-word2vec/
+
+
+# number of AIDs per session in train/test:
+#               count   mean    std   min    5%   10%   25%   50%    95%     98%     99%     max
+# train: 10584517.000 15.442 29.418 2.000 2.000 2.000 3.000 6.000 62.000 108.000 152.000 498.000
+# test:   1783737.000  4.250  8.388 1.000 1.000 1.000 1.000 2.000 15.000  27.000  38.000 465.000
+#
+# 782842 unique AIDs with 'clicks'
+# 50871 unique AIDs with 'orders'
+
+# word2vec embeddings (all types, size=100, mincount=5, window=10),
+# retrieve top 20 similar with annoy/w2vec/faiss/faiss_ivff
+# - compare to top click-to-click
+#          aid  time_ann  time_w2vec  time_faiss  time_faiss_ivff  co-countXannoy  co-countXw2vec  co-countXfaiss  co-countXfaiss_ivff  annoyXw2vec  faissXw2vec  faiss_ivffXw2vec  faissXfaiss_ivff
+# 0 928838.322     0.064       0.077       0.085            0.006           0.237           0.126           0.245                0.242        0.204        0.256             0.247             0.973
+# - compare to top buy-to-buy
+#          aid  time_ann  time_w2vec  time_faiss  time_faiss_ivff  co-countXannoy  co-countXw2vec  co-countXfaiss  co-countXfaiss_ivff  annoyXw2vec  faissXw2vec  faiss_ivffXw2vec  faissXfaiss_ivff
+# 0 926372.715     0.030       0.079       0.074            0.004           0.185           0.263           0.199                0.197        0.379        0.420             0.411             0.980
+
+# ******************************************************************************
 
 
 # ******************************************************************************
