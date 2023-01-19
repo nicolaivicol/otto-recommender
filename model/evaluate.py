@@ -12,7 +12,7 @@ log = logging.getLogger(os.path.basename(__file__))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
-    parser.add_argument('--file_submit', default='submission-v1.0.0-7fa08333-20230119143255.csv')
+    parser.add_argument('--file_submit', default='submission-v1.0.0-0505c388-20230119171211.csv')
     args = parser.parse_args()
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
@@ -31,10 +31,10 @@ if __name__ == '__main__':
         .with_column(pl.lit(1).alias('target'))
 
     submission = submission \
-        .with_column(pl.col('session_type').str.split('_').alias('session_type_split')) \
+        .with_column(pl.col('session_type').cast(str).str.split('_').alias('session_type_split')) \
         .with_column(pl.col('session_type_split').arr.get(0).alias('session').cast(pl.Int32)) \
         .with_column(pl.col('session_type_split').arr.get(1).alias('type')) \
-        .with_column(pl.col('labels').str.split(' ')) \
+        .with_column(pl.col('labels').cast(str).str.split(' ')) \
         .explode('labels') \
         .with_column(pl.col('labels').cast(pl.Int32).alias('aid')) \
         .drop(['labels', 'session_type', 'session_type_split']) \
