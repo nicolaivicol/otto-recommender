@@ -68,7 +68,7 @@ def load_sessions_as_sentences(files_or_dirs: Union[str, List[str]], types: List
         files_or_dirs = [files_or_dirs]
 
     df_sentences = pl.concat([load_sessions_lazy(f, types) for f in files_or_dirs]).collect()
-    logger.debug(f'loaded {df_sentences.shape[0]} sessions, from {",".join(files_or_dirs)}')
+    log.debug(f'loaded {df_sentences.shape[0]} sessions, from {",".join(files_or_dirs)}')
     return df_sentences
 
 
@@ -80,7 +80,7 @@ def load_w2vec_model(model_name) -> Word2Vec:
     model_file = get_model_file(model_name)
 
     if config.W2VEC_USE_CACHE and os.path.exists(model_file):
-        logger.debug(f'loading Word2Vec model from cache file {model_file}')
+        log.debug(f'loading Word2Vec model from cache file {model_file}')
         return Word2Vec.load(model_file)
     else:
         return train_w2vec_model(model_name)
@@ -89,16 +89,16 @@ def load_w2vec_model(model_name) -> Word2Vec:
 def train_w2vec_model(model_name) -> Word2Vec:
     tic = time.time()
     model_config = config.W2VEC_MODELS[model_name]
-    logger.debug(f'training Word2Vec with name=\'{model_name}\' '
+    log.debug(f'training Word2Vec with name=\'{model_name}\' '
                  f'and config: {json.dumps(model_config, indent=2)}')
     df_sentences = load_sessions_as_sentences(model_config['dir_sessions'], types=model_config.get('types', None))
     w2vec_model = Word2Vec(sentences=df_sentences['sentence'].to_list(), workers=16, **model_config['params'])
 
-    logger.debug(f'time elapsed: {time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
+    log.debug(f'time elapsed: {time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
 
     w2vec_model.save(get_model_file(model_name))
     # w2vec_model.wv.save()
-    logger.debug(f"model saved to: {get_model_file(model_name)}")
+    log.debug(f"model saved to: {get_model_file(model_name)}")
 
     return w2vec_model
 
@@ -113,16 +113,16 @@ def load_annoy_index(words: List[int], embeddings: List[List[float]], model_name
 
     try:
         index_ann.load(file_index)
-        logger.debug(f'loaded index from: {file_index}')
+        log.debug(f'loaded index from: {file_index}')
     except Exception as e:
-        logger.warning(f'start building the index, could not load index from file: {file_index}, error: {str(e)}')
+        log.warning(f'start building the index, could not load index from file: {file_index}, error: {str(e)}')
 
         for aid, idx in word2idx.items():
             index_ann.add_item(idx, embeddings[idx])
 
         index_ann.build(n_trees=config.W2VEC_MODELS[model_name]['n_trees'])  # eta ~10min for trees=100
         index_ann.save(file_index)
-        logger.debug(f'saved index to: {file_index}')
+        log.debug(f'saved index to: {file_index}')
 
     return index_ann
 
@@ -183,7 +183,7 @@ def get_top_k_similar_faiss(
         eta = len(words_q) / aids_per_sec
         msg = (f'ETA is {time.strftime("%Hh %Mmin %Ssec", time.gmtime(eta))} '
                f'for get_top_k_similar_faiss() on {len(words_q)} words')
-        logger.warning(msg)
+        log.warning(msg)
 
     words_q_embeddings = [map_word_embedding.get(word) for word in words_q]
     which_word_has_embedding = [i for i, embedding in enumerate(words_q_embeddings) if embedding is not None]
@@ -223,7 +223,7 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
     file_nns = f'{get_model_file(model_name)}.top-{k}-nns-{first_n_aids}-aids.parquet'
 
     if config.W2VEC_USE_CACHE and os.path.exists(file_nns):
-        logger.info('loading KNNs from cache')
+        log.info('loading KNNs from cache')
         return pl.read_parquet(file_nns)
 
     w2vec_model = load_w2vec_model(model_name)
@@ -240,14 +240,14 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
 
 if __name__ == '__main__':
     # Train all models from config
-    os.makedirs(f'{config.DIR_ARTIFACTS}/wor2vec', exist_ok=True)
+    os.makedirs(f'{config.DIR_ARTIFACTS}/word2vec', exist_ok=True)
     for model_name in config.W2VEC_MODELS.keys():
-        logger.info(f'train word2vec model \'{model_name}\' to generate embeddings, '
+        log.info(f'train word2vec model \'{model_name}\' to generate embeddings, '
                     f'then retrieve top-k nearest AIDs after indexing the embeddings.')
-        logger.debug(f'config: \n {json.dumps(config.W2VEC_MODELS[model_name], indent=2)}')
+        log.debug(f'config: \n {json.dumps(config.W2VEC_MODELS[model_name], indent=2)}')
         df_knns = retrieve_w2vec_knns_via_faiss_index(model_name)
         n_candidates, n_aids = df_knns.shape[0], len(df_knns['aid'].unique()),
-        logger.info(f'{n_candidates:,} candidates retrieved for {n_aids:,} unique AIDs')
+        log.info(f'{n_candidates:,} candidates retrieved for {n_aids:,} unique AIDs')
 
 
 
