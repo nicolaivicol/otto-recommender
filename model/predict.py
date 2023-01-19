@@ -46,7 +46,7 @@ if __name__ == "__main__":
         for data_file in data_files:
             log.debug(f'predict scores for file={os.path.basename(data_file)} \n')
             # data_file = data_files[17]
-            X, session, aid, is_retrieved, y = load_data_for_lgbm_predict(data_file, feat_names, f'target_{target}')
+            X, session, aid_next, is_retrieved, y = load_data_for_lgbm_predict(data_file, feat_names, f'target_{target}')
             pred_score = lgbm_ranker.predict(X)
 
             # recall@20 = 0.57 (0.1*0.49 + 0.3*0.42 + 0.6*0.65)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
                 recall_20 = compute_recall_at_k(session, y, pred_score, is_retrieved, k=20)
                 log.debug(f'recall@20={recall_20:.4}')
 
-            cols = {'session': session, 'aid': aid, 'pred_score': pred_score, 'is_retrieved': is_retrieved}
+            cols = {'session': session, 'aid_next': aid_next, 'pred_score': pred_score, 'is_retrieved': is_retrieved}
             if y is not None:
                 cols[f'target_{target}'] = y
 

@@ -105,10 +105,10 @@ def load_data_for_lgbm_predict(file: str, feats: List[str], target_name=None):
     df = pl.read_parquet(file)
     X = df.select(feats).to_pandas().values
     session = df['session'].to_numpy()
-    aid = df['aid_next'].to_numpy()
+    aid_next = df['aid_next'].to_numpy()
     is_retrieved = df['src_any'].to_numpy()
     y = df[target_name].to_numpy() if target_name is not None else None
-    return X, session, aid, is_retrieved, y
+    return X, session, aid_next, is_retrieved, y
 
 
 def load_data_for_lgbm_dask(source: Union[str, List[str]], target: str, feats: List[str] = None):
