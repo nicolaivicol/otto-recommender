@@ -366,7 +366,7 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_1_2'),
     ])
     df = df.drop(['n_aid_next_is_aid'])
-    df = df.with_column(pl.col([col for col in df.columns if 'src_' in col]).fill_null(pl.lit(0)))
+    df = df.with_column(pl.col([col for col in df.columns if 'src_' in col]).fill_null(0))
 
     # add more features
     # action_num_reverse_chrono 0.658588344124041
@@ -382,38 +382,27 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     # TODO: add new 'next_aid' per session, based on general and doc2vec cluster popularity
     # ...
 
-    # TODO: join general and doc2vec cluster popularity features by 'next_aid'
+    # TODO: join general and doc2vec cluster popularity features by 'next_aid', specify source 'src_doc2vec', 'src_pop'
     # ...
 
-    # join labels for learning
+    # if available, join labels for learning
     if labels_exists:
         for type, type_id in config.TYPE2ID.items():
-            df_labels_type = df_labels. \
-                filter(pl.col('type') == type_id). \
-                with_columns([pl.lit(1).cast(pl.Int8).alias(f'target_{type}')]) \
+            df_labels_type = df_labels \
+                .filter(pl.col('type') == type_id) \
+                .with_columns([pl.lit(1).cast(pl.Int8).alias(f'target_{type}')]) \
                 .drop('type')
-            df = df.join(df_labels_type,
-                         left_on=['session', 'aid_next'],
-                         right_on=['session', 'aid'],
-                         how='outer')
+
+            df = df.join(df_labels_type, left_on=['session', 'aid_next'], right_on=['session', 'aid'], how='left')
 
         cols_target = ['target_clicks', 'target_carts', 'target_orders']
-        cols_src = [c for c in df.columns if 'src_' in c]
-        df = df.with_column(pl.col(cols_target + cols_src).fill_null(0))
+        df = df.with_column(pl.col(cols_target).fill_null(0))
         df = df.fill_null(-1)
-
-        recalls_after_retrieval = compute_recall_after_retrieval(df)
-        log.debug(json.dumps(recalls_after_retrieval))
 
     log.info(f'Data frame created: {df.shape[0]:,} rows, {df.shape[1]} columns. Saving to: {file_out}')
 
-    df = df.sort('session')  # important
-
-    df.write_parquet(file_out)
-
-    if labels_exists:
-        # save data ready for learning-to-rank models (e.g. lightgbm.dask.DaskLGBMRanker)
-        df.filter(pl.col('src_any') == 1).write_parquet(file_out.replace('-retrieved', '-ltr'))
+    df = df.sort('session')  # important to sort
+    df.write_parquet(file_out)  # save data ready for learning-to-rank models (e.g. lightgbm.dask.DaskLGBMRanker)
 
     return df
 
@@ -428,13 +417,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     log.info('Start retrieve.py with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This retrieves candidates and generates features, ETA ~20min.')
+    log.info('This retrieves candidates and generates features, ETA ~15min.')
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
     dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved'
     os.makedirs(dir_out, exist_ok=True)
-    os.makedirs(f'{config.DIR_DATA}/{args.data_split_alias}-ltr', exist_ok=True)
+    os.makedirs(f'{config.DIR_DATA}/{args.data_split_alias}-retrieved-ltr', exist_ok=True)
 
     # load pairs by co-event counts
     dir_counts = f'{config.DIR_DATA}/{args.data_split_alias}-counts-co-event'
