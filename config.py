@@ -9,6 +9,8 @@ import copy
 import logging
 from typing import List
 
+VERSION = '1.0.0'
+
 # Directories
 # ******************************************************************************
 DIR_PROJ = (Path(__file__) / '..').resolve()
@@ -129,6 +131,46 @@ W2VEC_MODELS = {
         'dir_sessions': [
             f'{DIR_DATA}/train-test-parquet/train_sessions/*.parquet',
             f'{DIR_DATA}/train-test-parquet/test_sessions/*.parquet'
+        ],
+        'types': [1, 2],  # which event types to filter
+        # word2vec embedding parameters:
+        'params': {
+            'vector_size': 100,
+            'window': 10,
+            'min_count': 5,
+        },
+        'k': 20,  # number of neighbours to retrieve
+        'first_n_aids': 600_000,  # for how many AIDs (words) to find neighbours (output df has first_n_aids*k rows)
+        # params for faiss index:
+        'nlist': 100,  # how many cells
+        'nprobe': 3,  # how many closest cells to search
+    },
+    'word2vec-full-types-all-size-100-mincount-5-window-10': {
+        # source of sessions (as sentences) with AIDs (as words)
+        'dir_sessions': [
+            f'{DIR_DATA}/full-parquet/train_sessions/*.parquet',
+            f'{DIR_DATA}/full-parquet/test_sessions/*.parquet'
+        ],
+        'types': [0, 1, 2],  # which event types to filter
+        # word2vec embedding parameters:
+        'params': {
+            'vector_size': 100,
+            'window': 10,
+            'min_count': 5,
+        },
+        'k': 20,  # number of neighbours to retrieve
+        'first_n_aids': 600_000,  # for how many AIDs (words) to find neighbours (output df has first_n_aids*k rows)
+        # params for faiss index:
+        'nlist': 100, # how many cells
+        'nprobe': 3,  # how many closest cells to search
+        # params for annoy index:
+        'n_trees': 20,  # number of trees
+    },
+    'word2vec-full-types-1-2-size-100-mincount-5-window-10': {
+        # source of sessions (as sentences) with AIDs (as words)
+        'dir_sessions': [
+            f'{DIR_DATA}/full-parquet/train_sessions/*.parquet',
+            f'{DIR_DATA}/full-parquet/test_sessions/*.parquet'
         ],
         'types': [1, 2],  # which event types to filter
         # word2vec embedding parameters:
