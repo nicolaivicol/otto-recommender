@@ -43,11 +43,12 @@ if __name__ == "__main__":
     parser.add_argument('--keep_top_k', type=int, default=20)
     parser.add_argument('--tag', default=f'v{config.VERSION}')
     args = parser.parse_args()
+    # python -m model.submit --data_split_alias full
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This generates a submission for kaggle.')
 
-    dir_predict = f'{config.DIR_DATA}/{args.data_split_alias}-predict'
+    dir_ranked = f'{config.DIR_DATA}/{args.data_split_alias}-ranked'
     dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-submit'
     os.makedirs(dir_out, exist_ok=True)
 
@@ -56,7 +57,7 @@ if __name__ == "__main__":
 
     for target in ['clicks', 'carts', 'orders']:
         log.debug(f'target={target}')
-        df_pred = pl.read_parquet(f'{dir_predict}/{target}/*.parquet')
+        df_pred = pl.read_parquet(f'{dir_ranked}/{target}/*.parquet')
 
         if 'pred_rank' in df_pred.columns:
             df_pred = df_pred.drop('pred_rank')
@@ -69,7 +70,7 @@ if __name__ == "__main__":
 
         df_pred = df_pred\
             .filter(pl.col('is_retrieved') == 1)\
-            .with_column(pl.col('pred_score').rank('ordinal', reverse=False)
+            .with_column(pl.col('pred_score').rank('ordinal', reverse=True)
                          .over('session').cast(pl.Int16).alias('pred_rank'))\
             .filter((pl.col('pred_rank') <= args.keep_top_k)) \
             .sort(['session', 'pred_rank'])
