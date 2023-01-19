@@ -296,37 +296,6 @@ def compute_recall_after_retrieval(df: pl.DataFrame, k: int = 20) -> Dict:
 
     r['recall'] = round(0.1 * r['recall_clicks'] + 0.3 * r['recall_carts'] + 0.6 * r['recall_orders'], 5)
 
-    # number of AIDs in the target tables by type:
-    #          mean   std   min    5%   10%   25%   50%   95%   98%    99%    max
-    # clicks: 1.000 0.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000  1.000  1.000
-    # carts:  1.910 2.119 1.000 1.000 1.000 1.000 1.000 5.000 8.000 10.000 61.000
-    # orders: 2.012 2.052 1.000 1.000 1.000 1.000 1.000 6.000 8.000 10.000 32.000
-
-    # recall after retrieval:
-    # ver 1: 2023-01-11 21:56, commit 57346077
-    # {'recall_clicks': 0.49162, 'recall_carts': 0.431, 'recall_orders': 0.64224, 'recall': 0.56381}
-    # {'recall_clicks': 0.49785, 'recall_carts': 0.44199, 'recall_orders': 0.65814, 'recall': 0.57727}
-    # {'recall_clicks': 0.48427, 'recall_carts': 0.42086, 'recall_orders': 0.64831, 'recall': 0.56367}
-    # {'recall_clicks': 0.48555, 'recall_carts': 0.43733, 'recall_orders': 0.65651, 'recall': 0.57366}
-
-    # ver 2: 2023-01-14 01:44, commit 5e3f7030
-    # {'recall_clicks': 0.52446, 'recall_carts': 0.4658, 'recall_orders': 0.67116, 'recall': 0.59488}
-
-    # ver 3: 2023-01-14 02:24, commit 7faa73d1
-    # {'recall_clicks': 0.53438, 'recall_carts': 0.47283, 'recall_orders': 0.66918, 'recall': 0.59679}
-    # {'recall_clicks': 0.54341, 'recall_carts': 0.48132, 'recall_orders': 0.67977, 'recall': 0.6066}
-    # {'recall_clicks': 0.53096, 'recall_carts': 0.46004, 'recall_orders': 0.6705, 'recall': 0.59341}
-    # {'recall_clicks': 0.53178, 'recall_carts': 0.47703, 'recall_orders': 0.67849, 'recall': 0.60338}
-
-    # ver 4: 2023-01-17 01:37
-    # {"recall_clicks": 0.5454, "recall_carts": 0.48396, "recall_orders": 0.6868, "recall": 0.61181}
-
-    # kaggle:
-    # https://www.kaggle.com/competitions/otto-recommender-system/discussion/370116
-    # for 200 candidates
-    # clicks recall = 0.58486 carts recall = 0.49270 orders recall = 0.69467
-    # clicks recall = 0.6506179886006195 carts recall = 0.527631391786734 orders recall = 0.7216145392798664
-
     return r
 
 
@@ -454,6 +423,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_split_alias', default='train-test')
     parser.add_argument('--w2vec_model_all', default='word2vec-train-test-types-all-size-100-mincount-5-window-10')
     parser.add_argument('--w2vec_model_1_2', default='word2vec-train-test-types-1-2-size-100-mincount-5-window-10')
+    # python -m model.retrieve --data_split_alias full --w2vec_model_all word2vec-full-types-all-size-100-mincount-5-window-10 --w2vec_model_1_2 word2vec-full-types-1-2-size-100-mincount-5-window-10
 
     args = parser.parse_args()
 
@@ -488,6 +458,53 @@ if __name__ == '__main__':
             df_knns_w2vec_all=df_knns_w2vec_all,
             df_knns_w2vec_1_2=df_knns_w2vec_1_2,
         )
+
+
+# ******************************************************************************
+# number of AIDs in the target tables by type:
+#          mean   std   min    5%   10%   25%   50%   95%   98%    99%    max
+# clicks: 1.000 0.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000  1.000  1.000
+# carts:  1.910 2.119 1.000 1.000 1.000 1.000 1.000 5.000 8.000 10.000 61.000
+# orders: 2.012 2.052 1.000 1.000 1.000 1.000 1.000 6.000 8.000 10.000 32.000
+
+# recall after retrieval:
+# ver 1: 2023-01-11 21:56, commit 57346077
+# {'recall_clicks': 0.49162, 'recall_carts': 0.431, 'recall_orders': 0.64224, 'recall': 0.56381}
+# {'recall_clicks': 0.49785, 'recall_carts': 0.44199, 'recall_orders': 0.65814, 'recall': 0.57727}
+# {'recall_clicks': 0.48427, 'recall_carts': 0.42086, 'recall_orders': 0.64831, 'recall': 0.56367}
+# {'recall_clicks': 0.48555, 'recall_carts': 0.43733, 'recall_orders': 0.65651, 'recall': 0.57366}
+
+# ver 2: 2023-01-14 01:44, commit 5e3f7030
+# {'recall_clicks': 0.52446, 'recall_carts': 0.4658, 'recall_orders': 0.67116, 'recall': 0.59488}
+
+# ver 3: 2023-01-14 02:24, commit 7faa73d1
+# {'recall_clicks': 0.53438, 'recall_carts': 0.47283, 'recall_orders': 0.66918, 'recall': 0.59679}
+# {'recall_clicks': 0.54341, 'recall_carts': 0.48132, 'recall_orders': 0.67977, 'recall': 0.6066}
+# {'recall_clicks': 0.53096, 'recall_carts': 0.46004, 'recall_orders': 0.6705, 'recall': 0.59341}
+# {'recall_clicks': 0.53178, 'recall_carts': 0.47703, 'recall_orders': 0.67849, 'recall': 0.60338}
+
+# ver 4: 2023-01-17 01:37
+# {"recall_clicks": 0.5454, "recall_carts": 0.48396, "recall_orders": 0.6868, "recall": 0.61181}
+
+# kaggle:
+# https://www.kaggle.com/competitions/otto-recommender-system/discussion/370116
+# for 200 candidates
+# clicks recall = 0.58486 carts recall = 0.49270 orders recall = 0.69467
+# clicks recall = 0.6506179886006195 carts recall = 0.527631391786734 orders recall = 0.7216145392798664
+
+# https://www.kaggle.com/competitions/otto-recommender-system/discussion/376789
+# recall at 100
+# clicks recall = 0.6515316707053238
+# carts recall = 0.5054104031001835
+# orders recall = 0.7048352553279094
+# overall recall = 0.6396774411973329
+#
+# recall at 20
+# clicks recall = 0.5340063432688679
+# carts recall = 0.4237135902195957
+# orders recall = 0.6600268258685532
+# overall recall = 0.5765308069138975
+# ******************************************************************************
 
 
 
