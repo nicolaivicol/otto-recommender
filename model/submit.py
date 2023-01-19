@@ -34,7 +34,7 @@ def get_submit_file_name(tag=None):
     tag = '' if args.tag is None else f'-{tag}'
     commit_hash = '' if get_last_commit_hash() is None else f'-{get_last_commit_hash()}'
     timestamp = f'-{get_timestamp()}'
-    return f'submission{tag}{commit_hash}{timestamp}'
+    return f'submission{timestamp}{tag}{commit_hash}'
 
 
 if __name__ == "__main__":
@@ -59,19 +59,10 @@ if __name__ == "__main__":
         log.debug(f'target={target}')
         df_pred = pl.read_parquet(f'{dir_ranked}/{target}/*.parquet')
 
-        if 'pred_rank' in df_pred.columns:
-            df_pred = df_pred.drop('pred_rank')
-
-        if 'aid' in df_pred.columns:
-            df_pred = df_pred.rename({'aid': 'aid_next'})
-
-        if 'is_retrieved' not in df_pred.columns:
-            df_pred = df_pred.with_column(pl.lit(1).alias('is_retrieved'))
-
         df_pred = df_pred\
-            .filter(pl.col('is_retrieved') == 1)\
+            .select(['session', 'aid_next', 'pred_score']) \
             .with_column(pl.col('pred_score').rank('ordinal', reverse=True)
-                         .over('session').cast(pl.Int16).alias('pred_rank'))\
+                         .over('session').cast(pl.Int16).alias('pred_rank')) \
             .filter((pl.col('pred_rank') <= args.keep_top_k)) \
             .sort(['session', 'pred_rank'])
 
@@ -84,10 +75,13 @@ if __name__ == "__main__":
             .with_column(pl.col('labels').arr.join(' '))\
             .sort('session_type')
 
+        log.debug('\n' + str(df_pred.head(10)))
+
         df_submit.append(df_pred)
 
     df_submit = pl.concat(df_submit).sort('session_type')
+    log.debug('\n' + str(df_submit.head(10)))
 
     file_out = f'{dir_out}/{get_submit_file_name(args.tag)}.csv'
     df_submit.write_csv(file_out, has_header=True)
-    log.info(f'submission saved to {file_out}')
+    log.info(f'submission with {df_submit.shape[0]} rows saved to {file_out}')
