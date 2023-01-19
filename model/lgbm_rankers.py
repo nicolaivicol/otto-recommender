@@ -101,6 +101,16 @@ def load_data_for_lgbm_standard(source: Union[str, List[str]], target: str, feat
     return X, y, group_counts, feats
 
 
+def load_data_for_lgbm_predict(file: str, feats: List[str], target_name=None):
+    df = pl.read_parquet(file)
+    X = df.select(feats).to_pandas().values
+    session = df['session'].to_numpy()
+    aid = df['aid_next'].to_numpy()
+    is_retrieved = df['src_any'].to_numpy()
+    y = df[target_name].to_numpy() if target_name is not None else None
+    return X, session, aid, is_retrieved, y
+
+
 def load_data_for_lgbm_dask(source: Union[str, List[str]], target: str, feats: List[str] = None):
     ddf = dd.read_parquet(
         path=source,  # files_retrieved[:1],
@@ -192,7 +202,7 @@ def save_lgbm(lgbm_model: Union[lightgbm.LGBMRanker, lightgbm.DaskLGBMRanker], f
     log.debug(f'Booster saved to: {file_name}.booster.lgbm')
 
 
-def load_lgbm(file_name, format: str):
+def load_lgbm(file_name, format: str = 'booster.lgbm') -> Union[lightgbm.LGBMRanker, lightgbm.DaskLGBMRanker, lightgbm.Booster]:
     model_file = f'{file_name}.{format}'
 
     if format in ['dasklgbm.pickle', 'lgbm.pickle']:
@@ -260,7 +270,7 @@ if __name__ == "__main__":
     # args.max_files_in_valid = 1
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This trains ranker models for clicks/carts/orders. ETA ?min.')
+    log.info('This trains ranker models for clicks/carts/orders. ETA 60min.')
 
     dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-ltr'
     files = sorted(glob.glob(f'{dir_retrieved_w_feats}/*.parquet'))

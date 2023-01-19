@@ -3,6 +3,7 @@ import shutil
 import math
 import numpy as np
 import pandas as pd
+import polars as pl
 from typing import List
 from IPython.display import display, HTML
 import plotly.graph_objects as go
@@ -58,4 +59,26 @@ def set_display_options():
 #             shutil.rmtree(dir)
 #         except OSError as e:
 #             warnings.warn("Error: %s - %s." % (e.filename, e.strerror))
+
+
+def compute_recall_at_k(session, target, pred_score, is_retrieved=None, k=20):
+    if is_retrieved is None:
+        is_retrieved = np.repeat(1, len(session))
+
+    df_tmp = pl.DataFrame({'session': session, 'target': target, 'pred_score': pred_score, 'is_retrieved': is_retrieved})
+    df_tmp = df_tmp \
+        .select([
+            pl.all(),
+            (pl.col('pred_score').rank('ordinal', reverse=True).over('session').cast(pl.Int16).alias('pred_rank')),
+        ]) \
+        .sort(['session', 'pred_rank'])
+
+    df_tmp = df_tmp \
+        .groupby('session') \
+        .agg([(pl.col('target') * pl.col('is_retrieved') * (pl.col('pred_rank') <= k)).sum().alias('hit'),
+              pl.sum('target').clip_max(k)]) \
+        .sum() \
+        .select(pl.col('hit') / pl.col('target'))
+
+    return df_tmp[0, 0]
 
