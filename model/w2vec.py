@@ -239,11 +239,12 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
 
 
 if __name__ == '__main__':
-    # Train all models from config
+    log.info('This trains all word2vec models specified in the config.')
+    log.info('First, it trains the word2vec model to generate embeddings. '
+             'Then it retrieves top-k nearest AIDs after indexing the embeddings.')
     os.makedirs(f'{config.DIR_ARTIFACTS}/word2vec', exist_ok=True)
     for model_name in config.W2VEC_MODELS.keys():
-        log.info(f'train word2vec model \'{model_name}\' to generate embeddings, '
-                    f'then retrieve top-k nearest AIDs after indexing the embeddings.')
+        log.info(f'train word2vec model \'{model_name}\' then retrieve KNNs...')
         log.debug(f'config: \n {json.dumps(config.W2VEC_MODELS[model_name], indent=2)}')
         df_knns = retrieve_w2vec_knns_via_faiss_index(model_name)
         n_candidates, n_aids = df_knns.shape[0], len(df_knns['aid'].unique()),
