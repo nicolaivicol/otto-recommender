@@ -101,14 +101,12 @@ def load_data_for_lgbm_standard(source: Union[str, List[str]], target: str, feat
     return X, y, group_counts, feats
 
 
-def load_data_for_lgbm_predict(file: str, feats: List[str], target_name=None):
+def load_data_for_lgbm_predict(file: str, feats: List[str]):
     df = pl.read_parquet(file)
     X = df.select(feats).to_pandas().values
     session = df['session'].to_numpy()
     aid_next = df['aid_next'].to_numpy()
-    is_retrieved = df['src_any'].to_numpy()
-    y = df[target_name].to_numpy() if target_name is not None else None
-    return X, session, aid_next, is_retrieved, y
+    return X, session, aid_next
 
 
 def load_data_for_lgbm_dask(source: Union[str, List[str]], target: str, feats: List[str] = None):
@@ -217,8 +215,8 @@ def load_lgbm(file_name, format: str = 'booster.lgbm') -> Union[lightgbm.LGBMRan
     return lgbm_model
 
 
-def get_file_name(dir_out, target, data_split_alias, **kwargs):
-    file_name = f'{dir_out}/{target}-{data_split_alias}'
+def get_file_name(dir_out, target, **kwargs):
+    file_name = f'{dir_out}/{target}'
     if kwargs:
         file_name += '-' + '-'.join(f'{k}-{v}' for k, v in kwargs.items())
     return file_name
@@ -272,7 +270,7 @@ if __name__ == "__main__":
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This trains ranker models for clicks/carts/orders. ETA 60min.')
 
-    dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-ltr'
+    dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved-ltr'
     files = sorted(glob.glob(f'{dir_retrieved_w_feats}/*.parquet'))
     dir_out = f'{config.DIR_ARTIFACTS}/lgbm'
 
