@@ -1,40 +1,14 @@
 import logging
 import argparse
 import json
-import numpy as np
 import polars as pl
-import pandas as pd
-import glob
 import os.path
-from tqdm import tqdm
-from typing import List, Dict, Union
 
 import config
-from utils import set_display_options
+from utils import get_submit_file_name
 
-set_display_options()
+
 log = logging.getLogger(os.path.basename(__file__))
-
-
-def get_last_commit_hash():
-    try:
-        import subprocess
-        result = subprocess.check_output(['git', 'log', '-1', '--pretty=format:"%H"'])
-        return result.decode('utf-8').replace('"', '')[:8]
-    except Exception as e:
-        return None
-
-
-def get_timestamp():
-    from datetime import datetime
-    return datetime.now().strftime("%Y%m%d%H%M%S")
-
-
-def get_submit_file_name(tag=None):
-    tag = '' if args.tag is None else f'-{tag}'
-    commit_hash = '' if get_last_commit_hash() is None else f'-{get_last_commit_hash()}'
-    timestamp = f'-{get_timestamp()}'
-    return f'submission{timestamp}{tag}{commit_hash}'
 
 
 if __name__ == "__main__":
