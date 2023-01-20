@@ -26,7 +26,6 @@ if __name__ == '__main__':
     dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-evals-retrieved'
     os.makedirs(dir_out)
 
-    # dir_retrieved = '../data/train-test-retrieved/0000000_0100000.parquet'
     df_retrieved = pl.scan_parquet(dir_retrieved) \
         .select(['session', 'aid_next']) \
         .with_column(pl.lit(1).cast(pl.Int8).alias('submit')) \
