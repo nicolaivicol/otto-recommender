@@ -16,6 +16,19 @@ the train sessions, like Kaggle's test.
 * Add top 20 similar aids based on word2vec trained on _all actions_ as sentence.
 * Add top 20 similar aids based on word2vec trained on _carts and orders_ actions as sentence.
 
+```
+# Maximum recal@20 possible for top K candidates:
+# ┌────────┬─────────────────┬──────────────────┬──────────────────┬──────────────────┐
+# │ type   ┆ recall@20-top20 ┆ recall@20-top100 ┆ recall@20-top200 ┆ recall@20-topall │
+# ╞════════╪═════════════════╪══════════════════╪══════════════════╪══════════════════╡
+# │ clicks ┆ 0.174403        ┆ 0.47164          ┆ 0.522317         ┆ 0.550825         │
+# │ carts  ┆ 0.10698         ┆ 0.340022         ┆ 0.417022         ┆ 0.494018         │
+# │ orders ┆ 0.111423        ┆ 0.386607         ┆ 0.516885         ┆ 0.704218         │
+# │ total  ┆ 0.116388        ┆ 0.381135         ┆ 0.487469         ┆ 0.625819         │
+# └────────┴─────────────────┴──────────────────┴──────────────────┴──────────────────┘
+```
+
+
 ### Ranking
 Train 3 separate LightGBM rankers for clicks, carts and orders.  
 Trained only on first 500K test session (due to memory limits).
