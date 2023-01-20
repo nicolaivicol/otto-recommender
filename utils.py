@@ -53,32 +53,22 @@ def set_display_options():
     # display(HTML("<style>.container { width:80% !important; }</style>"))
 
 
-# def remove_folder(dir):
-#     if os.path.exists(dir):
-#         try:
-#             shutil.rmtree(dir)
-#         except OSError as e:
-#             warnings.warn("Error: %s - %s." % (e.filename, e.strerror))
+def get_last_commit_hash():
+    try:
+        import subprocess
+        result = subprocess.check_output(['git', 'log', '-1', '--pretty=format:"%H"'])
+        return result.decode('utf-8').replace('"', '')[:8]
+    except Exception as e:
+        return None
 
 
-def compute_recall_at_k(session, target, pred_score, is_retrieved=None, k=20):
-    if is_retrieved is None:
-        is_retrieved = np.repeat(1, len(session))
+def get_timestamp():
+    from datetime import datetime
+    return datetime.now().strftime("%Y%m%d%H%M%S")
 
-    df_tmp = pl.DataFrame({'session': session, 'target': target, 'pred_score': pred_score, 'is_retrieved': is_retrieved})
-    df_tmp = df_tmp \
-        .select([
-            pl.all(),
-            (pl.col('pred_score').rank('ordinal', reverse=True).over('session').cast(pl.Int16).alias('pred_rank')),
-        ]) \
-        .sort(['session', 'pred_rank'])
 
-    df_tmp = df_tmp \
-        .groupby('session') \
-        .agg([(pl.col('target') * pl.col('is_retrieved') * (pl.col('pred_rank') <= k)).sum().alias('hit'),
-              pl.sum('target').clip_max(k)]) \
-        .sum() \
-        .select(pl.col('hit') / pl.col('target'))
-
-    return df_tmp[0, 0]
-
+def get_submit_file_name(prefix='submission', tag=None):
+    tag = '' if tag is None else f'-{tag}'
+    commit_hash = '' if get_last_commit_hash() is None else f'-{get_last_commit_hash()}'
+    timestamp = f'-{get_timestamp()}'
+    return f'{prefix}{timestamp}{tag}{commit_hash}'
