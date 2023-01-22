@@ -74,9 +74,10 @@ CO_EVENTS_TO_COUNT = [
 # RETRIEVAL
 # to retrieve candidates co-events, keep only the last N events in session
 # use a high number to keep all
-RETRIEVE_N_LAST_CLICKS = 30  # 30: percentile 99%
-RETRIEVE_N_LAST_CARTS = 999  # 25: percentile 99.5%
-RETRIEVE_N_LAST_ORDERS = 999  # 25: percentile 99.5%
+RETRIEVE_N_LAST_CLICKS = 99  # 30: percentile 99%
+RETRIEVE_N_LAST_CARTS = 99  # 25: percentile 99.5%
+RETRIEVE_N_LAST_ORDERS = 99  # 25: percentile 99.5%
+RETRIEVE_N_MOST_FREQUENT = 99  #
 
 MAP_NAME_COUNT_TYPE = {
     # (event type to next event type(s))

@@ -181,7 +181,7 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
     :param model_name: model name (alias) as in config, e.g. 'word2vec-train-test-types-all-size-100-mincount-5-window-10'
     :param k:  number of neighbours to retrieve
     :param first_n_aids: for how many AIDs (words) to find neighbours (output df will have first_n_aids*k rows)
-    :return:
+    :return: DataFrame[aid, aid_next, dist, rank]
     """
 
     if k is None:
