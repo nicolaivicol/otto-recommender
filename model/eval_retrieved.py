@@ -3,10 +3,10 @@ import argparse
 import json
 import polars as pl
 import os.path
+from tabulate import tabulate
 
 import config
-from utils import get_submit_file_name
-
+from utils import get_submit_file_name, describe_numeric
 
 log = logging.getLogger(os.path.basename(__file__))
 
@@ -105,6 +105,10 @@ if __name__ == '__main__':
 
     log.info(f'Metrics saved to: {file_out}')
 
+    stats_summary = describe_numeric(df_retrieved.groupby('session').agg([pl.count().alias('n')]).to_pandas()[['n']])
+    log.info(f'Stats of number of aids per session: \n{str(tabulate(stats_summary, headers=stats_summary.columns, showindex=False))}')
+
+
 
 # ******************************************************************************
 # V.1.0.0
@@ -119,3 +123,7 @@ if __name__ == '__main__':
 # │ orders ┆ 0.111423        ┆ 0.386607         ┆ 0.516885         ┆ 0.704218         │
 # │ total  ┆ 0.116388        ┆ 0.381135         ┆ 0.487469         ┆ 0.625819         │
 # └────────┴─────────────────┴──────────────────┴──────────────────┴──────────────────┘
+# Stats of number of aids per session:
+#       count     mean      std    min    1%    5%    10%    25%    50%    75%    90%    95%    99%    max
+# -----------  -------  -------  -----  ----  ----  -----  -----  -----  -----  -----  -----  -----  -----
+# 1.78374e+06  113.306  142.586      1     1    20     32     48     61    121    239    368    789   3994
