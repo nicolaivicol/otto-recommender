@@ -19,13 +19,13 @@ def describe_numeric(df: pd.DataFrame, cols_num: List[str]=None, percentiles: Li
     Describe numeric columns
     :param df: pandas data frame
     :param cols_num: numeric columns to describe, by default: identified automatically
-    :param percentiles: percentiles to compute, default: [0.05, 0.25, 0.50, 0.75, 0.95]
+    :param percentiles: percentiles to compute, default: [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
     :return: pandas df with stats
     """
     if cols_num is None:
         cols_num = list(df.head(1).select_dtypes(include=['number']).columns)
     if percentiles is None:
-        percentiles = [0.05, 0.25, 0.50, 0.75, 0.95]
+        percentiles = [0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 0.99]
     if len(cols_num) == 0:
         return None
     d_describe = df[cols_num].describe(percentiles=percentiles).T
