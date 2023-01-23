@@ -4,12 +4,9 @@
 
 from pathlib import Path
 import os
-import json
-import copy
 import logging
-from typing import List
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 # Directories
 # ******************************************************************************
