@@ -26,7 +26,7 @@ if __name__ == '__main__':
 
     dir_retrieved = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved/*.parquet'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels/*.parquet'
-    dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-evals-retrieved'
+    dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-eval-retrieved'
     os.makedirs(dir_out, exist_ok=True)
 
     df_labels = pl.read_parquet(dir_labels) \

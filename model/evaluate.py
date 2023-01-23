@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
     labels = pl.read_parquet(f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels/*.parquet')
     submission = pl.read_csv(f'{config.DIR_DATA}/{args.data_split_alias}-submit/{args.file_submit}')
-    dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-evaluate'
+    dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-eval-submissions'
     os.makedirs(dir_out, exist_ok=True)
 
     labels = labels \
