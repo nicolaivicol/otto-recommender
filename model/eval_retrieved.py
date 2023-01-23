@@ -2,6 +2,7 @@ import logging
 import argparse
 import json
 import polars as pl
+import pandas as pd
 import os.path
 from tabulate import tabulate
 
@@ -105,7 +106,16 @@ if __name__ == '__main__':
 
     log.info(f'Metrics saved to: {file_out}')
 
-    stats_summary = describe_numeric(df_retrieved.groupby('session').agg([pl.count().alias('n')]).to_pandas()[['n']])
+    srcs = ['src_any', 'src_self', 'src_click_to_click', 'src_click_to_cart_or_buy', 'src_cart_to_cart',
+            'src_cart_to_buy', 'src_buy_to_buy', 'src_w2vec_all', 'src_w2vec_1_2']
+    df_retrieved = pl.scan_parquet(dir_retrieved).select(['session'] + srcs).collect()
+
+    lst_summary = []
+    for src in srcs:
+        stats_summary = describe_numeric(df_retrieved.groupby('session').agg([pl.sum(src).alias('n')]).to_pandas()[['n']])
+        lst_summary.append(pd.concat([pd.DataFrame({'source': [src]}), stats_summary.reset_index(drop=True)], axis=1, ignore_index=False))
+
+    stats_summary = pd.concat(lst_summary).drop(columns=['count', 'std', 'count_nan', 'prc_nan'])
     log.info(f'Stats of number of aids per session: \n{str(tabulate(stats_summary, headers=stats_summary.columns, showindex=False))}')
 
 
@@ -139,8 +149,15 @@ if __name__ == '__main__':
 # │ orders ┆ 0.160223        ┆ 0.48024          ┆ 0.581966         ┆ 0.709191         │
 # │ total  ┆ 0.161492        ┆ 0.466805         ┆ 0.54272          ┆ 0.631057         │
 # └────────┴─────────────────┴──────────────────┴──────────────────┴──────────────────┘
-#
-#       count     mean      std    min    1%    5%    10%    25%    50%    75%    90%    95%    99%    max
-# -----------  -------  -------  -----  ----  ----  -----  -----  -----  -----  -----  -----  -----  -----
-# 1.78374e+06  120.274  133.133      1     1    20     34     54     68    135    258    379    698   2333
-#
+# Stats of number of aids per session, by type:
+# source                          mean    min    1%    5%    10%    25%    50%    75%    90%    95%    99%    max
+# ------------------------  ----------  -----  ----  ----  -----  -----  -----  -----  -----  -----  -----  -----
+# src_any                   120.274         1     1    20     34     54     68    135    258    379    698   2333
+# src_self                    3.06404       1     1     1      1      1      1      3      6     10     24    137
+# src_click_to_click         20.4743        0     0     2      9     10     10     21     41     63    133    553
+# src_click_to_cart_or_buy   20.1769        0     0     0      3     10     10     20     42     66    139    577
+# src_cart_to_cart            4.6614        0     0     0      0      0      0      0     20     29     80    669
+# src_cart_to_buy             3.31474       0     0     0      0      0      0      0      7     22     63    509
+# src_buy_to_buy              0.324095      0     0     0      0      0      0      0      0      0      9    262
+# src_w2vec_all              42.785         0     0     0     20     20     20     48     91    132    242    881
+# src_w2vec_1_2              40.9392        0     0     0      0     20     20     41     92    133    242    871
