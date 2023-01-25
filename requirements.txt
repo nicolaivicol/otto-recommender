@@ -19,7 +19,8 @@ fastparquet
 polars
 pyarrow
 dask
+dask-ml
 gensim
 faiss
-bokeh>=2.1.1
 # annoy  # fails installation
+bokeh>=2.1.1
