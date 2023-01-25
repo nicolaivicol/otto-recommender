@@ -4,7 +4,6 @@ import json
 import os
 import glob
 import logging
-from pathlib import Path
 import argparse
 
 import polars as pl
@@ -12,11 +11,10 @@ import numpy as np
 from sklearn.cluster import KMeans
 
 import config
-from utils import set_display_options, describe_numeric
+from utils import set_display_options
 from dask_utils import set_up_dask_client
 
 from model.w2vec import load_w2vec_model
-import dask_ml.datasets
 import dask_ml.cluster
 import dask.array
 
