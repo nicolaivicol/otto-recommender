@@ -7,13 +7,13 @@ import pandas as pd
 import glob
 import os.path
 import pickle
-from typing import List, Dict, Union
+from typing import List, Union
 import lightgbm
 import dask.dataframe as dd
-from dask.distributed import Client, LocalCluster
-from psutil import virtual_memory, cpu_count
+from dask.distributed import Client
 
 import config
+from dask_utils import set_up_dask_client
 from utils import set_display_options
 
 set_display_options()
@@ -64,20 +64,6 @@ PARAMS_LGBM_FIT = {
     # early_stopping_rounds=20,
     'verbose': 25,
 }
-
-
-def set_up_dask_client():
-    log.debug('Setting up dask cluster and client...')
-    memory_limit = round(virtual_memory().total / 1e9) - 1
-    cluster = LocalCluster(
-        n_workers=1,
-        threads_per_worker=max(cpu_count() // 2, 1),
-        memory_limit=f'{memory_limit}GB',
-    )
-    log.debug(f'Dask cluster dashboard link: {cluster.dashboard_link}')
-    client = Client(cluster)
-    log.debug(f'Dask client dashboard link: {client.dashboard_link}')
-    return client
 
 
 def _infer_feats_from_df(df):
