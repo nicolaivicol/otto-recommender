@@ -8,7 +8,6 @@ import random
 import numpy as np
 import polars as pl
 from gensim.models import Word2Vec
-from annoy import AnnoyIndex
 import faiss
 
 import config
@@ -75,6 +74,7 @@ def train_w2vec_model(model_name) -> Word2Vec:
 
 def load_annoy_index(words: List[int], embeddings: List[List[float]], model_name: str):
     # not used
+    from annoy import AnnoyIndex
     vector_size = config.W2VEC_MODELS[model_name]['params'].get('vector_size', 100)
     n_trees = config.W2VEC_MODELS[model_name]['n_trees']
     file_index = f'{get_model_file(model_name)}.index-ntrees-{n_trees}.ann'
