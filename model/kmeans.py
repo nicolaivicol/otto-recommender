@@ -141,7 +141,7 @@ if __name__ == '__main__':
 
     log.info('Fit KMeans')
 
-    lst_n_clusters = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
+    lst_n_clusters = [10, 20, 50]  # can't find more than 50 clusters
     res = []
 
     for n_clusters in tqdm(lst_n_clusters, unit='model'):
