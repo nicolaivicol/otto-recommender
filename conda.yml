@@ -33,3 +33,4 @@ dependencies:
   - faiss
   - annoy
   - bokeh>=2.1.1
+  - h5py
