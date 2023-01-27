@@ -370,7 +370,28 @@ def stats_number_of_aid_next_per_session(df):
     return summary_
 
 
-def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_events, df_knns_w2vec_all, df_knns_w2vec_1_2):
+def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_events,
+                           df_knns_w2vec_all, df_knns_w2vec_1_2, df_session_cl, df_pop_cl50):
+    """
+    This function retrieves candidates for each session and attaches features.
+
+    :param file_sessions: file path of the sessions data frame in parquet format
+    :param file_labels: file path of the labels data frame in parquet format (if it exists)
+    :param file_out: file path of the output data frame in parquet format
+    :param aid_pairs_co_events: a dictionary of data frames containing co-event counts for different event types
+    :param df_knns_w2vec_all: data frame containing all aid-aid_next pairs with their word2vec rank and distance, for all types
+    :param df_knns_w2vec_1_2: data frame containing aid-aid_next pairs that with their word2vec rank and distance, for types carts and orders
+    :param df_session_cl: data frame containing session-cluster information
+    :param df_pop_cl50: data frame containing popularity of aid by tyoe, in 50 clusters of sessions
+
+    The function first checks if the labels data frame exists and reads it if it does.
+    It then reads the sessions data frame and gets unique session-aid pairs.
+    It then gets all aid-aid_next pairs from self-join, co-events, and word2vec.
+    The function then joins co-event counts and word2vec rank/distance as features.
+    It trims weaker pairs so that more recent AIDs have more pairs and older AIDs have less pairs.
+    The function then keeps session-aid_next only as key, removes aid, and aggregates other columns.
+    It then saves the output data frame in the specified file path in parquet format.
+    """
 
     labels_exists = os.path.exists(file_labels)
     if labels_exists:
@@ -464,24 +485,35 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_1_2'),
     ])
     df = df.drop(['n_aid_next_is_aid'])
+
+    # add new 'next_aid' per session, based on popularity within doc2vec cluster of the session
+    df = df.join(df_session_cl.select(['session', 'cl50']), on='session', how='left')
+
+    df_ses_cl50_aid = df \
+        .select(['session', 'cl50']) \
+        .unique() \
+        .join(df_pop_cl50.rename({'aid': 'aid_next'}), on='cl50') \
+        .with_column(pl.lit(1).cast(pl.Int8).alias('src_pop_cl50'))
+
+    cols_rank = [col for col in df_ses_cl50_aid.columns if (col.startswith('rank_') & col.endswith('_cl50'))]
+
+    df = df \
+        .join(df_ses_cl50_aid.filter(pl.min(cols_rank) <= 20),
+              on=['session', 'cl50', 'aid_next'],
+              how='outer') \
+        .drop('cl50')
+
+    # mark all candidates with 'src_any'=1
+    df = df.with_column(pl.lit(1).cast(pl.Int8).alias('src_any'))
+
+    # fill NULLs with 0 for src_ columns
     df = df.with_column(pl.col([col for col in df.columns if 'src_' in col]).fill_null(0))
 
-    # add more features
-    # action_num_reverse_chrono 0.658588344124041
-    # aid 0.11817917885568481
-    # relative_position_in_session 0.04306810550235335
-    # type_weighted_log_recency_score 0.0403055170220625
-    # log_recency_score 0.0028580939171428945
+    # fill timestamp order with 999 to have candidates from cluster last when sorting before saving
+    df = df.with_column(pl.col('ts_order_aid').fill_null(999))
 
-    # replace NULLs with -1
+    # replace NULLs with -1 for other columns
     df = df.fill_null(-1)
-    # df = df.with_column(pl.col(df.columns).fill_null(pl.lit(-1)))
-
-    # TODO: add new 'next_aid' per session, based on general and doc2vec cluster popularity
-    # ...
-
-    # TODO: join general and doc2vec cluster popularity features by 'next_aid', specify source 'src_doc2vec', 'src_pop'
-    # ...
 
     # if available, join labels for learning
     if labels_exists:
@@ -499,10 +531,16 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
 
         df = df.with_column(pl.col(cols_target).fill_null(0))
 
-    log.info(f'Data frame created: {df.shape[0]:,} rows, {df.shape[1]} columns. Saving to: {file_out}')
+    log.info(f'Data frame created: {df.shape[0]:,} rows, {df.shape[1]} columns.')
 
-    df = df.sort(['session', 'ts_order_aid'])  # important to sort by session
-    df.write_parquet(file_out)  # save data ready for learning-to-rank models (e.g. lightgbm.dask.DaskLGBMRanker)
+    log.debug('Sorting by session...')
+    # important to sort by session (sorting by ts_order_aid is optional, but helps to see recall@k when evaluating)
+    df = df.sort(['session'])
+    # df = df.sort(['session', 'ts_order_aid'])
+
+    log.info(f'Saving to: {file_out}')
+    # save data ready for learning-to-rank models (e.g. lightgbm.dask.DaskLGBMRanker)
+    df.write_parquet(file_out)
 
     return df
 
@@ -517,7 +555,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     log.info('Start retrieve.py with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This retrieves candidates and generates features, ETA ~22min.')
+    log.info('This retrieves candidates and generates features, ETA ~30min.')
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
@@ -535,9 +573,14 @@ if __name__ == '__main__':
     df_knns_w2vec_1_2 = retrieve_w2vec_knns_via_faiss_index(args.w2vec_model_1_2)\
         .rename({'dist_w2vec': 'dist_w2vec_1_2', 'rank_w2vec': 'rank_w2vec_1_2'})
 
+    # load aids by popularity within sessions clusters (based on word2vec embeddings of aids within session)
+    dir_counts_pop = f'{config.DIR_DATA}/{args.data_split_alias}-counts-popularity'
+    df_session_cl = pl.read_parquet(f'{dir_counts_pop}/sessions_clusters.parquet')
+    df_pop_cl50 = pl.read_parquet(f'{dir_counts_pop}/aid_clusters_50_count_ranks.parquet')
+
     files_sessions = sorted(glob.glob(f'{dir_sessions}/*.parquet'))
 
-    for file_sessions in tqdm(files_sessions, total=len(files_sessions), unit='part'):
+    for file_sessions in tqdm(files_sessions, total=len(files_sessions), unit='part', leave=False):
         retrieve_and_gen_feats(
             file_sessions=file_sessions,
             file_labels=f'{dir_labels}/{os.path.basename(file_sessions)}',
@@ -545,6 +588,8 @@ if __name__ == '__main__':
             aid_pairs_co_events=aid_pairs_co_events,
             df_knns_w2vec_all=df_knns_w2vec_all,
             df_knns_w2vec_1_2=df_knns_w2vec_1_2,
+            df_session_cl=df_session_cl,
+            df_pop_cl50=df_pop_cl50,
         )
 
 

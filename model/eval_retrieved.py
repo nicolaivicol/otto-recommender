@@ -22,7 +22,7 @@ if __name__ == '__main__':
     # python -m model.eval_retrieved
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This evaluates the retrieved candidates. ')
+    log.info('This evaluates the retrieved candidates. ETA 15min.')
 
     dir_retrieved = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved/*.parquet'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels/*.parquet'
@@ -35,7 +35,7 @@ if __name__ == '__main__':
     lst_metrics_all = []
 
     srcs = ['src_any', 'src_self', 'src_click_to_click', 'src_click_to_cart_or_buy', 'src_cart_to_cart',
-            'src_cart_to_buy', 'src_buy_to_buy', 'src_w2vec_all', 'src_w2vec_1_2']
+            'src_cart_to_buy', 'src_buy_to_buy', 'src_w2vec_all', 'src_w2vec_1_2', 'src_pop_cl50', ]
 
     filters_src = {src: pl.col(src) == 1 for src in srcs}
     filters_src_not_self = {f'{src} & not self_src': ((pl.col(src) == 1) & (pl.col('src_self') == 0))

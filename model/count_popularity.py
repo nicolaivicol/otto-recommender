@@ -14,7 +14,10 @@ log = logging.getLogger(os.path.basename(__file__))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
+    parser.add_argument('--keep_top_n', default=20)
     args = parser.parse_args()
+
+    keep_top_n = args.keep_top_n
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This counts popularity ranks of aids within session clusters.')
@@ -78,10 +81,10 @@ if __name__ == '__main__':
         cols_rank = [col for col in df_agg.columns if col.startswith('rank_')]
         df_agg = df_agg.select(['aid', f'cl{n_clusters}'] + cols_rank)
 
-        # keep only top 20 by each type and horizon
-        df_agg = df_agg.filter(pl.min(cols_rank) <= 20)
+        # keep only top N by each type and horizon
+        df_agg = df_agg.filter(pl.min(cols_rank) <= keep_top_n)
 
-        log.debug('Save clusters with top 20 aids by each type/horizon: \n' + str(df_agg))
+        log.debug(f'Save clusters with top {keep_top_n} aids by each type/horizon: \n' + str(df_agg))
         df_agg.write_parquet(f'{dir_out}/aid_clusters_{n_clusters}_count_ranks.parquet')
 
     cols_cl = [col for col in df_sessions.columns if col.startswith('cl')]
