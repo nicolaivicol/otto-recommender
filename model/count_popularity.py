@@ -70,8 +70,8 @@ if __name__ == '__main__':
             ])
 
         # compute ranks of aid within clusters
-        with_columns = [(pl.col(col).rank('ordinal', reverse=True).over(f'cl{n_clusters}')
-                         .cast(pl.Int32).alias(col.replace('n_', 'rank_')))
+        with_columns = [(pl.col(col).rank('ordinal', reverse=True).over(f'cl{n_clusters}').clip_max(999)
+                         .cast(pl.Int16).alias(col.replace('n_', 'rank_')))
                         for col in df_agg.columns if col.startswith('n_')]
         df_agg = df_agg.with_columns(with_columns)
         df_agg = df_agg.rename({col: f'{col}_cl{n_clusters}' for col in df_agg.columns if col.startswith('rank_')})
