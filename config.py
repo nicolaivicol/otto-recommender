@@ -184,3 +184,6 @@ W2VEC_MODELS = {
         'nprobe': 3,  # how many closest cells to search
     },
 }
+
+
+N_CLUSTERS = [10, 20, 50]
