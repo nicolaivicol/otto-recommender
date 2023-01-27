@@ -36,7 +36,24 @@ Trained only on first 500K test session (due to memory limits).
 ### Results
 Recall@20 on local test sessions: **0.5620** 
   * clicks: 0.4925 
-  * orders: 0.6508  
   * carts: 0.4074
+  * orders: 0.6508
 
 Recall@20 on LB: **0.565** (without re-counting co-events)
+
+## Ver 1.1.0
+Adding more candidates from co-counts
+
+## Ver 1.2.0
+Adding candidates from clusters of sessions 
+(KNN of 50 clusters, embedding based on word2vec embeddings of actions in the session).   
+
+```
+# Maximum recal@20 possible for top K candidates:
+source,type,recall@20-top20,recall@20-top100,recall@20-top200,recall@20-topall
+src_any,clicks,0.1593,0.4725,0.5396,0.5720
+src_any,carts,0.0994,0.3371,0.4266,0.5091
+src_any,orders,0.1057,0.3809,0.5236,0.7146
+src_any,total,0.1092,0.3769,0.4961,0.6387
+```
+
