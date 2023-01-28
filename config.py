@@ -186,4 +186,5 @@ W2VEC_MODELS = {
 }
 
 
-N_CLUSTERS = [10, 20, 50]
+N_CLUSTERS_TO_FIND = [10, 20, 50]  # which cluster size to find; can't find more than 50 clusters
+N_CLUSTERS_TO_JOIN = [50]
