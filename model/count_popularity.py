@@ -35,10 +35,12 @@ if __name__ == '__main__':
     log.debug(f'Loaded df with {df_sessions.shape[0]:,} rows and {df_sessions.shape[1]} columns')
 
     log.info('Join sessions clusters with various n_clusters (these were precomputed with kmeans.py)')
-    # add a miscellaneous clusterization with one cluster only having all sessions in it
-    df_sessions = df_sessions.with_column(pl.lit(0).cast(pl.Int8).alias('cl1'))
 
-    for n_clusters in config.N_CLUSTERS:
+    if 1 in config.N_CLUSTERS_TO_JOIN:
+        # add a miscellaneous clusterization with one cluster only, having all sessions in it (for general popularity)
+        df_sessions = df_sessions.with_column(pl.lit(0).cast(pl.Int8).alias('cl1'))
+
+    for n_clusters in config.N_CLUSTERS_TO_JOIN:
         df_clusters = pl.read_parquet(f'{dir_sessions_clusters}/sessions-clusters-{n_clusters}.parquet')
         df_clusters = df_clusters.rename({'cluster': f'cl{n_clusters}'})
         df_sessions = df_sessions.join(df_clusters, on='session', how='left')
@@ -47,10 +49,9 @@ if __name__ == '__main__':
 
     log.info('Join ranks of AIDs by counts inside clusters...')
     time_max = df_sessions['ts'].max()
-    ts_1d = time_max - 1 * 24 * 60 * 60
     ts_7d = time_max - 7 * 24 * 60 * 60
 
-    for n_clusters in ([1] + config.N_CLUSTERS):
+    for n_clusters in config.N_CLUSTERS_TO_JOIN:
         # n_clusters = 1
         log.debug(f'Join ranks within clusters out of n_clusters={n_clusters}')
 
@@ -58,15 +59,9 @@ if __name__ == '__main__':
         df_agg = df_sessions \
             .groupby([f'cl{n_clusters}', 'aid']) \
             .agg([
-                (pl.col('type') >= 0).sum().cast(pl.Int32).alias('n_total'),
                 (pl.col('type') == 0).sum().cast(pl.Int32).alias('n_clicks'),
                 (pl.col('type') == 1).sum().cast(pl.Int32).alias('n_carts'),
                 (pl.col('type') == 2).sum().cast(pl.Int32).alias('n_orders'),
-                ((pl.col('type') >= 0) & (pl.col('ts') > ts_1d)).sum().cast(pl.Int32).alias('n_total_1d'),
-                ((pl.col('type') == 0) & (pl.col('ts') > ts_1d)).sum().cast(pl.Int32).alias('n_clicks_1d'),
-                ((pl.col('type') == 1) & (pl.col('ts') > ts_1d)).sum().cast(pl.Int32).alias('n_carts_1d'),
-                ((pl.col('type') == 2) & (pl.col('ts') > ts_1d)).sum().cast(pl.Int32).alias('n_orders_1d'),
-                ((pl.col('type') >= 0) & (pl.col('ts') > ts_7d)).sum().cast(pl.Int32).alias('n_total_7d'),
                 ((pl.col('type') == 0) & (pl.col('ts') > ts_7d)).sum().cast(pl.Int32).alias('n_clicks_7d'),
                 ((pl.col('type') == 1) & (pl.col('ts') > ts_7d)).sum().cast(pl.Int32).alias('n_carts_7d'),
                 ((pl.col('type') == 2) & (pl.col('ts') > ts_7d)).sum().cast(pl.Int32).alias('n_orders_7d'),
