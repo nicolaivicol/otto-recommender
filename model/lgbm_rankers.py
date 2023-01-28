@@ -47,8 +47,8 @@ PARAMS_LGBM = {
     'objective': 'lambdarank',
     'boosting_type': 'gbdt',
     'metric': 'ndcg',
-    'n_estimators': 200,
-    'learning_rate': 0.15,
+    'n_estimators': 150,
+    'learning_rate': 0.20,
     'max_depth': 4,
     'num_leaves': 15,
     'colsample_bytree': 0.50,  # aka feature_fraction
@@ -79,6 +79,8 @@ def load_data_for_lgbm_standard(source: Union[str, List[str]], target: str, feat
 
     if feats is None:
         feats = _infer_feats_from_df(df)
+
+    df = df.with_column(pl.col([f'target_{type}' for type in config.TYPE2ID.keys()]).fill_null(0))
 
     X = df.select(feats).to_pandas().values
     y = df[target].to_numpy()
@@ -201,10 +203,10 @@ def load_lgbm(file_name, format: str = 'booster.lgbm') -> Union[lightgbm.LGBMRan
     return lgbm_model
 
 
-def get_file_name(dir_out, target, **kwargs):
+def get_file_name(dir_out, target, *args):
     file_name = f'{dir_out}/{target}'
-    if kwargs:
-        file_name += '-' + '-'.join(f'{k}-{v}' for k, v in kwargs.items())
+    if args:
+        file_name += '-' + '-'.join(args)
     return file_name
 
 
@@ -247,16 +249,16 @@ if __name__ == "__main__":
     parser.add_argument('--max_files_in_valid', type=int)
     args = parser.parse_args()
 
-    # args.valid_frac = 0.50
-    # args.targets = ['clicks']
-    # args.use_dask = True
-    # args.max_files_in_train = 1
-    # args.max_files_in_valid = 1
+    args.valid_frac = 0.50
+    args.targets = ['carts', 'orders']
+    args.use_dask = False
+    args.max_files_in_train = 1
+    args.max_files_in_valid = 1
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This trains ranker models for clicks/carts/orders. ETA 60min.')
 
-    dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved-ltr'
+    dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved'
     files = sorted(glob.glob(f'{dir_retrieved_w_feats}/*.parquet'))
     dir_out = f'{config.DIR_ARTIFACTS}/lgbm'
 
@@ -276,7 +278,7 @@ if __name__ == "__main__":
         lgbm_ranker = fit_lgbm(X_train, y_train, group_train, feats, X_valid, y_valid, group_valid, dask_client)
 
         log.debug('Save model to disk...')
-        file_name = get_file_name(dir_out, target, args.data_split_alias)
+        file_name = get_file_name(dir_out, target)
         save_lgbm(lgbm_ranker, file_name)
         # save_feat_imp(lgbm_ranker, feats, file_name)
 
