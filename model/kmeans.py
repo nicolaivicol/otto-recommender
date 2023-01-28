@@ -141,11 +141,9 @@ if __name__ == '__main__':
 
     log.info('Fit KMeans')
 
-    lst_n_clusters = [10, 20, 50]  # can't find more than 50 clusters
     res = []
 
-    for n_clusters in tqdm(lst_n_clusters, unit='model'):
-        # n_clusters = 100
+    for n_clusters in tqdm(config.N_CLUSTERS_TO_FIND, unit='model'):
         if use_dask:
             log.debug(f'Init Dask KMeans with: n_clusters={n_clusters}')
             km = dask_ml.cluster.KMeans(
