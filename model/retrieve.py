@@ -495,13 +495,12 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         .join(df_pop_cl50.rename({'aid': 'aid_next'}), on='cl50') \
         .with_column(pl.lit(1).cast(pl.Int8).alias('src_pop_cl50'))
 
+    # keep only top 20 candidates by each type of rank
     cols_rank = [col for col in df_ses_cl50_aid.columns if (col.startswith('rank_') & col.endswith('_cl50'))]
+    df_ses_cl50_aid = df_ses_cl50_aid.filter(pl.min(cols_rank) <= 20)
 
-    df = df \
-        .join(df_ses_cl50_aid.filter(pl.min(cols_rank) <= 20),
-              on=['session', 'cl50', 'aid_next'],
-              how='outer') \
-        .drop('cl50')
+    # join new candidates with their ranks within clusters
+    df = df.join(df_ses_cl50_aid, on=['session', 'cl50', 'aid_next'], how='outer').drop('cl50')
 
     # mark all candidates with 'src_any'=1
     df = df.with_column(pl.lit(1).cast(pl.Int8).alias('src_any'))
@@ -515,9 +514,8 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     # replace NULLs with -1 for other columns
     df = df.fill_null(-1)
 
-    # if available, join labels for learning
+    # if available, join labels for learning-to-rank
     if labels_exists:
-        cols_target = []
 
         for type, type_id in config.TYPE2ID.items():
             col_target = f'target_{type}'
@@ -529,14 +527,16 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
 
             df = df.join(df_labels_type, left_on=['session', 'aid_next'], right_on=['session', 'aid'], how='left')
 
-        df = df.with_column(pl.col(cols_target).fill_null(0))
+        # fill NULLs for target_ columns with 0 or -1
+        cols_target = [col for col in df.columns if col.startswith('target_')]
+        df = df.with_column(pl.col(cols_target).fill_null(config.FILL_NULL_TARGET_WITH_VALUE))
 
     log.info(f'Data frame created: {df.shape[0]:,} rows, {df.shape[1]} columns.')
 
-    log.debug('Sorting by session...')
-    # important to sort by session (sorting by ts_order_aid is optional, but helps to see recall@k when evaluating)
-    df = df.sort(['session'])
-    # df = df.sort(['session', 'ts_order_aid'])
+    log.debug('Sorting by session and ts_order_aid...')
+    # important to sort by session (sorting by ts_order_aid is optional, but helps
+    # to see a more meaningful recall@k when evaluating the retrieved candidates
+    df = df.sort(['session', 'ts_order_aid'])
 
     log.info(f'Saving to: {file_out}')
     # save data ready for learning-to-rank models (e.g. lightgbm.dask.DaskLGBMRanker)
