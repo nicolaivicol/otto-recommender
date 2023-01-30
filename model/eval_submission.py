@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This evaluates a submission on test data.')
-    # python -m model.evaluate --data_split_alias train-test --file_submit submission-v1.0.0-0505c388-20230119171211.csv
+    # python -m model.eval_submission --data_split_alias train-test --file_submit submission-v1.0.0-0505c388-20230119171211.csv
 
     labels = pl.read_parquet(f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels/*.parquet')
     submission = pl.read_csv(f'{config.DIR_DATA}/{args.data_split_alias}-submit/{args.file_submit}')

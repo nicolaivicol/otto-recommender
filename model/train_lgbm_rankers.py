@@ -26,6 +26,7 @@ log = logging.getLogger(os.path.basename(__file__))
 # https://lightgbm.readthedocs.io/en/latest/Parameters.html
 # https://lightgbm.readthedocs.io/en/latest/Parallel-Learning-Guide.html#how-distributed-lightgbm-works
 # https://github.com/microsoft/LightGBM/blob/477cbf373ea2138a186568ac88ef221ac74c7c71/tests/python_package_test/test_dask.py#L480
+# https://www.kaggle.com/competitions/otto-recommender-system/discussion/381469
 
 # Statistics:
 # number of candidates per session:
@@ -249,7 +250,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_files_in_valid', type=int)
     args = parser.parse_args()
 
-    # python -m model.lgbm_rankers --data_split_alias train-test --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
+    # python -m model.train_lgbm_rankers --data_split_alias train-test --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
 
     # args.valid_frac = 0.30
     # args.targets = ['clicks', 'carts', 'orders']

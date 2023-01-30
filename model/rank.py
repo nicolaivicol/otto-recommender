@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 import config
 from utils import set_display_options
-from model.lgbm_rankers import load_lgbm, get_file_name, load_data_for_lgbm_predict
+from model.train_lgbm_rankers import load_lgbm, get_file_name, load_data_for_lgbm_predict
 
 set_display_options()
 log = logging.getLogger(os.path.basename(__file__))

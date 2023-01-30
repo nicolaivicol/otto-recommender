@@ -1,4 +1,3 @@
-import numpy
 import pandas as pd
 from tqdm import tqdm
 import json
@@ -16,7 +15,7 @@ import config
 from utils import set_display_options
 from dask_utils import set_up_dask_client
 
-from model.w2vec import load_w2vec_model
+from model.w2vec_aids import load_w2vec_model
 import dask_ml.cluster
 import dask.array
 

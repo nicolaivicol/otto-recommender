@@ -8,7 +8,7 @@ from tqdm import tqdm
 import argparse
 
 import config
-from model.w2vec import retrieve_w2vec_knns_via_faiss_index
+from model.w2vec_aids import retrieve_w2vec_knns_via_faiss_index
 
 
 log = logging.getLogger(os.path.basename(__file__))
