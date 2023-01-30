@@ -88,3 +88,6 @@ Train a seq2seq model (LSTM). Predict next sequence. Use only cards+orders.
 * https://www.kaggle.com/code/vslaykovsky/co-visitation-matrix
 * https://www.kaggle.com/code/cdeotte/test-data-leak-lb-boost
 * https://engineering.fb.com/2017/03/29/data-infrastructure/faiss-a-library-for-efficient-similarity-search/
+
+### General
+* [Top 200 : Empirical results/remarks about training the ranker.](https://www.kaggle.com/competitions/otto-recommender-system/discussion/381469)

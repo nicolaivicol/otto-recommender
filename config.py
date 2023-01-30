@@ -6,7 +6,7 @@ from pathlib import Path
 import os
 import logging
 
-VERSION = '1.2.0'
+VERSION = '1.4.0'
 
 # Directories
 # ******************************************************************************
@@ -189,3 +189,6 @@ N_CLUSTERS_TO_FIND = [10, 20, 50]  # which cluster size to find; can't find more
 N_CLUSTERS_TO_JOIN = [50]
 
 FILL_NULL_TARGET_WITH_VALUE = 0  # fill NULLs with 0 in target columns
+
+DOWNSAMPLE_RATIO_NEG_TO_POS = 20  # keep a ratio of max N negative samples to 1 positive sample
+DOWNSAMPLE_MAX_NEG_PER_SESSION = 50  # keep at most N negative samples per session

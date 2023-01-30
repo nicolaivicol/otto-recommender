@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This evaluates a submission on test data.')
-    # python -m model.eval_submission --data_split_alias train-test --file_submit submission-v1.0.0-0505c388-20230119171211.csv
+    # python -m model.eval_submission --file_submit v1.4.0-20230130152337-3f932a03.csv
 
     labels = pl.read_parquet(f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels/*.parquet')
     submission = pl.read_csv(f'{config.DIR_DATA}/{args.data_split_alias}-submit/{args.file_submit}')
@@ -51,20 +51,18 @@ if __name__ == '__main__':
         .agg([pl.sum('hit'), pl.sum('true')]) \
         .with_column((pl.col('hit') / pl.col('true')).alias('recall@20'))
 
-    log.debug('stats per type: \n' + str(joined))
-
     recall_agg = joined \
         .join(pl.DataFrame({'type': ['clicks', 'carts', 'orders'], 'weight': [0.1, 0.3, 0.6]}), on='type') \
         .with_column(pl.col('recall@20') * pl.col('weight')) \
-        .sum()
+        .sum()\
+        .with_column(pl.lit('total').alias('type'))
 
-    res = dict(zip(joined['type'], joined['recall@20']))
-    res['total'] = recall_agg[0, 'recall@20']
+    res = pl.concat([joined[['type', 'recall@20']], recall_agg[['type', 'recall@20']]])
 
-    log.info(f'Recall@20: {json.dumps(res)}')
+    log.debug('Recall@20 per type & weighted total: \n' + str(res))
 
     with open(f'{dir_out}/{args.file_submit}.json', 'w') as f:
-        json.dump(res, f)
+        json.dump(dict(zip(res['type'], res['recall@20'])), f, indent=2, sort_keys=True)
 
     # submission-v1.0.0-7fa08333-20230119143255.csv
     # Recall@20: {"clicks": 0.49250158806146027, "orders": 0.650877277624998, "carts": 0.40742088481818745, "total": 0.562002790826601}
@@ -85,3 +83,14 @@ if __name__ == '__main__':
     # │ orders ┆ 202256 ┆ 310905  ┆ 0.65054   │
     # │ clicks ┆ 856203 ┆ 1737968 ┆ 0.492646  │
     # └────────┴────────┴─────────┴───────────┘
+
+    # v1.4.0-20230130152337-3f932a03.csv
+    # Recall@20 per type & weighted total:
+    # ┌────────┬───────────┐
+    # │ type   ┆ recall@20 │
+    # ╞════════╪═══════════╡
+    # │ orders ┆ 0.65299   │
+    # │ clicks ┆ 0.493545  │
+    # │ carts  ┆ 0.407908  │
+    # │ total  ┆ 0.563521  │
+    # └────────┴───────────┘

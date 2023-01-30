@@ -85,3 +85,22 @@ src_w2vec_all              42.7851        0     0     0     20     20     20    
 src_w2vec_1_2              40.9391        0     0     0      0     20     20     41     92    133    242    861
 src_pop_cl50               56.9076       32    34    35     37     44     54     65     86     86     86     86
 ```
+
+## Ver 1.4.0
+Downsample negative samples to 20:1 max ratio with positive samples.    
+Keep at most 50 negative samples per session.   
+Filter out sessions without positive samples for target type.   
+Train on 75% of sessions, validate on 25% of sessions.   
+
+### Results
+Recall@20 on local test sessions: **0.5635** 
+```shell
+┌────────┬───────────┐
+│ type   ┆ recall@20 │
+╞════════╪═══════════╡
+│ orders ┆ 0.65299   │
+│ clicks ┆ 0.493545  │
+│ carts  ┆ 0.407908  │
+│ total  ┆ 0.563521  │
+└────────┴───────────┘
+```

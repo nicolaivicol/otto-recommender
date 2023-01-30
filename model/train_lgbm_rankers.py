@@ -245,12 +245,12 @@ if __name__ == "__main__":
     parser.add_argument('--data_split_alias', default='train-test')
     parser.add_argument('--valid_frac', default=0, type=float)  # 0: runs on full data, without validation, 0.30 - 30%
     parser.add_argument('--targets', nargs='+', default=['clicks', 'carts', 'orders'])
-    parser.add_argument('--use_dask', default=1, type=int)
+    parser.add_argument('--use_dask', default=0, type=int)
     parser.add_argument('--max_files_in_train', type=int)
     parser.add_argument('--max_files_in_valid', type=int)
     args = parser.parse_args()
 
-    # python -m model.train_lgbm_rankers --data_split_alias train-test --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
+    # python -m model.train_lgbm_rankers --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
 
     # args.valid_frac = 0.30
     # args.targets = ['clicks', 'carts', 'orders']
@@ -261,18 +261,18 @@ if __name__ == "__main__":
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This trains ranker models for clicks/carts/orders. ETA 60min.')
 
-    dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved'
-    files = sorted(glob.glob(f'{dir_retrieved_w_feats}/*.parquet'))
+    dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved-downsampled'
     dir_out = f'{config.DIR_ARTIFACTS}/lgbm'
     os.makedirs(dir_out, exist_ok=True)
 
-    files_train, files_valid = split_files_to_train_valid(files, args.valid_frac, args.max_files_in_train, args.max_files_in_valid)
     dask_client = set_up_dask_client() if args.use_dask == 1 else None
 
     for target in args.targets:
         log.info(f'Train LightGBM model for target={target}')
 
         log.debug('Split data for training...')
+        files = sorted(glob.glob(f'{dir_retrieved_w_feats}/{target}/*.parquet'))
+        files_train, files_valid = split_files_to_train_valid(files, args.valid_frac, args.max_files_in_train, args.max_files_in_valid)
         X_train, y_train, group_train, feats = load_data_for_lgbm(files_train, f'target_{target}', dask_client=dask_client)
         X_valid, y_valid, group_valid = None, None, None
         if files_valid is not None:
@@ -280,6 +280,13 @@ if __name__ == "__main__":
 
         log.debug('Training...')
         lgbm_ranker = fit_lgbm(X_train, y_train, group_train, feats, X_valid, y_valid, group_valid, dask_client)
+
+        log.debug(f'Model finished training. '
+                  f'Best iteration={str(lgbm_ranker.best_iteration_)}, '
+                  f'best score={str(lgbm_ranker.best_score_)}')
+
+        feat_imp = feature_importance_lgbm(lgbm_ranker, feats)
+        log.debug(f'Feature importance: \n{feat_imp.head(25)}')
 
         log.debug('Save model to disk...')
         file_name = get_file_name(dir_out, target)
