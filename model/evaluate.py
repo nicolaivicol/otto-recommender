@@ -17,6 +17,7 @@ if __name__ == '__main__':
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This evaluates a submission on test data.')
+    # python -m model.evaluate --data_split_alias train-test --file_submit submission-v1.0.0-0505c388-20230119171211.csv
 
     labels = pl.read_parquet(f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels/*.parquet')
     submission = pl.read_csv(f'{config.DIR_DATA}/{args.data_split_alias}-submit/{args.file_submit}')
@@ -69,10 +70,18 @@ if __name__ == '__main__':
     # Recall@20: {"clicks": 0.49250158806146027, "orders": 0.650877277624998, "carts": 0.40742088481818745, "total": 0.562002790826601}
     # ┌────────┬────────┬─────────┬───────────┐
     # │ type   ┆ hit    ┆ true    ┆ recall@20 │
-    # │ ---    ┆ ---    ┆ ---     ┆ ---       │
-    # │ str    ┆ i32    ┆ i32     ┆ f64       │
     # ╞════════╪════════╪═════════╪═══════════╡
     # │ carts  ┆ 230643 ┆ 566105  ┆ 0.407421  │
     # │ clicks ┆ 855952 ┆ 1737968 ┆ 0.492502  │
     # │ orders ┆ 202361 ┆ 310905  ┆ 0.650877  │
+    # └────────┴────────┴─────────┴───────────┘
+
+    # v1.2.0-20230129142628-4a0d1182.csv
+    # Recall@20: {"carts": 0.4057091882247993, "orders": 0.650539553883019, "clicks": 0.49264600959281185, "total": 0.5613010897565324}
+    # ┌────────┬────────┬─────────┬───────────┐
+    # │ type   ┆ hit    ┆ true    ┆ recall@20 │
+    # ╞════════╪════════╪═════════╪═══════════╡
+    # │ carts  ┆ 229674 ┆ 566105  ┆ 0.405709  │
+    # │ orders ┆ 202256 ┆ 310905  ┆ 0.65054   │
+    # │ clicks ┆ 856203 ┆ 1737968 ┆ 0.492646  │
     # └────────┴────────┴─────────┴───────────┘

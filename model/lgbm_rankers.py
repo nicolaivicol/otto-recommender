@@ -45,13 +45,13 @@ log = logging.getLogger(os.path.basename(__file__))
 
 PARAMS_LGBM = {
     'objective': 'lambdarank',
-    'boosting_type': 'gbdt',
+    'boosting_type': 'gbdt',  # 'gbdt', # 'dart',
     'metric': 'ndcg',
-    'n_estimators': 150,
-    'learning_rate': 0.20,
+    'n_estimators': 100,
+    'learning_rate': 0.30,
     'max_depth': 4,
     'num_leaves': 15,
-    'colsample_bytree': 0.50,  # aka feature_fraction
+    'colsample_bytree': 0.25,  # aka feature_fraction
     'subsample': 0.50,  # aka bagging_fraction
     # 'bagging_freq': 1,
     'min_child_samples': 20,  # aka min_data_in_leaf  ? read github link with test
@@ -80,7 +80,7 @@ def load_data_for_lgbm_standard(source: Union[str, List[str]], target: str, feat
     if feats is None:
         feats = _infer_feats_from_df(df)
 
-    df = df.with_column(pl.col([f'target_{type}' for type in config.TYPE2ID.keys()]).fill_null(0))
+    # df = df.with_column(pl.col([f'target_{type}' for type in config.TYPES]).fill_null(0).clip_min(0))
 
     X = df.select(feats).to_pandas().values
     y = df[target].to_numpy()
@@ -99,9 +99,9 @@ def load_data_for_lgbm_predict(file: str, feats: List[str]):
 
 def load_data_for_lgbm_dask(source: Union[str, List[str]], target: str, feats: List[str] = None):
     ddf = dd.read_parquet(
-        path=source,  # files_retrieved[:1],
+        path=source,
         engine='pyarrow',
-        chunksize='80mb',
+        chunksize='100Mb',
         aggregate_files=True,
         ignore_metadata_file=True,
     )
@@ -244,16 +244,18 @@ if __name__ == "__main__":
     parser.add_argument('--data_split_alias', default='train-test')
     parser.add_argument('--valid_frac', default=0, type=float)  # 0: runs on full data, without validation, 0.30 - 30%
     parser.add_argument('--targets', nargs='+', default=['clicks', 'carts', 'orders'])
-    parser.add_argument('--use_dask', default=True, type=bool)
+    parser.add_argument('--use_dask', default=1, type=int)
     parser.add_argument('--max_files_in_train', type=int)
     parser.add_argument('--max_files_in_valid', type=int)
     args = parser.parse_args()
 
-    args.valid_frac = 0.50
-    args.targets = ['carts', 'orders']
-    args.use_dask = False
-    args.max_files_in_train = 1
-    args.max_files_in_valid = 1
+    # python -m model.lgbm_rankers --data_split_alias train-test --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
+
+    # args.valid_frac = 0.30
+    # args.targets = ['clicks', 'carts', 'orders']
+    # args.use_dask = 0
+    # args.max_files_in_train = 2
+    # args.max_files_in_valid = 1
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This trains ranker models for clicks/carts/orders. ETA 60min.')
@@ -261,9 +263,10 @@ if __name__ == "__main__":
     dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved'
     files = sorted(glob.glob(f'{dir_retrieved_w_feats}/*.parquet'))
     dir_out = f'{config.DIR_ARTIFACTS}/lgbm'
+    os.makedirs(dir_out, exist_ok=True)
 
     files_train, files_valid = split_files_to_train_valid(files, args.valid_frac, args.max_files_in_train, args.max_files_in_valid)
-    dask_client = set_up_dask_client() if args.use_dask else None
+    dask_client = set_up_dask_client() if args.use_dask == 1 else None
 
     for target in args.targets:
         log.info(f'Train LightGBM model for target={target}')

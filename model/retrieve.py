@@ -129,7 +129,7 @@ def compute_session_stats(df_test: pl.DataFrame):
               ]) \
         .with_columns([
             (pl.col('max_ts_session') - pl.col('min_ts_session')).alias('duration_session'),
-            ((pl.col('n_clicks_session') == 0) & (pl.col('n_carts_session') == 0) & (pl.col('n_orders_session') > 0)).alias('only_orders_session'),
+            ((pl.col('n_clicks_session') == 0) & (pl.col('n_carts_session') == 0) & (pl.col('n_orders_session') > 0)).cast(pl.Int8).alias('only_orders_session'),
         ])
     return df_session
 

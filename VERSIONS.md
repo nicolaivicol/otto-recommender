@@ -57,3 +57,31 @@ src_any,orders,0.1057,0.3809,0.5236,0.7146
 src_any,total,0.1092,0.3769,0.4961,0.6387
 ```
 
+## Ver 1.3.0
+Adding candidates from clusters of sessions, only from KNN of 50 clusters.
+
+The maximum recal@20 possible for top K retrieved candidates if ranked ideally, by sources (src_any=all sources, src_...=other sources separately):
+```
+source      type      recall@20-top20    recall@20-top100    recall@20-top200    recall@20-topall
+---------   ------  -----------------  ------------------  ------------------  ------------------
+src_any     clicks        0.196203             0.5307             0.560093            0.569288
+src_any     carts         0.152458             0.424199           0.467714            0.50739
+src_any     orders        0.16003              0.481797           0.584761            0.713684
+src_any     total         0.161375             0.469408           0.54718             0.637356
+```
+
+Stats of number of aids per session, by source: 
+```
+source                          mean    min    1%    5%    10%    25%    50%    75%    90%    95%    99%    max
+------------------------  ----------  -----  ----  ----  -----  -----  -----  -----  -----  -----  -----  -----
+src_any                   172.354        56    71    83     88    104    126    186    305    424    740   2322
+src_self                    3.06404       1     1     1      1      1      1      3      6     10     24    137
+src_click_to_click         20.474         0     0     2      9     10     10     21     41     63    133    553
+src_click_to_cart_or_buy   20.1775        0     0     0      3     10     10     20     42     66    139    569
+src_cart_to_cart            4.66161       0     0     0      0      0      0      0     20     29     80    657
+src_cart_to_buy             3.31507       0     0     0      0      0      0      0      7     22     63    517
+src_buy_to_buy              0.324088      0     0     0      0      0      0      0      0      0      9    266
+src_w2vec_all              42.7851        0     0     0     20     20     20     48     91    132    243    858
+src_w2vec_1_2              40.9391        0     0     0      0     20     20     41     92    133    242    861
+src_pop_cl50               56.9076       32    34    35     37     44     54     65     86     86     86     86
+```
