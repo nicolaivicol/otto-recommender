@@ -188,4 +188,4 @@ W2VEC_MODELS = {
 N_CLUSTERS_TO_FIND = [10, 20, 50]  # which cluster size to find; can't find more than 50 clusters
 N_CLUSTERS_TO_JOIN = [50]
 
-FILL_NULL_TARGET_WITH_VALUE = -1  # fill NULLs with this value in target columns, 0 or -1
+FILL_NULL_TARGET_WITH_VALUE = 0  # fill NULLs with 0 in target columns
