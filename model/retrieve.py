@@ -193,7 +193,7 @@ def get_session_aid_pairs_unique(df_sessions_aids_full: pl.DataFrame) -> pl.Data
         ((pl.col('ts_order_aid_clicks') <= config.RETRIEVE_N_LAST_CLICKS)) |
         ((pl.col('ts_order_aid_carts') <= config.RETRIEVE_N_LAST_CARTS)) |
         ((pl.col('ts_order_aid_orders') <= config.RETRIEVE_N_LAST_ORDERS)) |
-        ((pl.col('ts_order_aid_orders') <= config.RETRIEVE_N_MOST_FREQUENT))
+        ((pl.col('rank_by_n_aid') <= config.RETRIEVE_N_MOST_FREQUENT))
     )
 
     df_sessions_aids = df_sessions_aids \
