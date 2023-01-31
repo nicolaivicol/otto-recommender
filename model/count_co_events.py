@@ -66,7 +66,7 @@ def count_co_events(df_merged: pl.DataFrame) -> Dict['str', pl.DataFrame]:
         df_tmp = df_merged \
             .filter((pl.col('type') == type_this)
                     & (pl.col('type_next').is_in(types_next))
-                    & (pl.col('time_to_next').abs() <= config.MAP_MAX_TIME_TO_NEXT['count_type'])) \
+                    & (pl.col('time_to_next').abs() <= config.MAP_MAX_TIME_TO_NEXT[count_type])) \
             .groupby(['aid', 'aid_next']) \
             .agg([pl.col('aid_next').count().alias('count')])
         counts_co_events[count_type] = df_tmp
@@ -181,6 +181,8 @@ if __name__ == '__main__':
     parser.add_argument('--merge', default=True)
     parser.add_argument('--merge_train_test', default=True)
     args = parser.parse_args()
+
+    # python -m model.count_co_events --data_split_alias full
 
     dir_sessions_train = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/train_sessions'
     dir_sessions_test = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
