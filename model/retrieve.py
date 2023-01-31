@@ -8,6 +8,7 @@ from tqdm import tqdm
 import argparse
 
 import config
+from model.kmeans_sessions import load_aid_embeddings
 from model.w2vec_aids import retrieve_w2vec_knns_via_faiss_index
 
 
@@ -371,7 +372,8 @@ def stats_number_of_aid_next_per_session(df):
 
 
 def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_events,
-                           df_knns_w2vec_all, df_knns_w2vec_1_2, df_session_cl, df_pop_cl50):
+                           df_knns_w2vec_all, df_knns_w2vec_1_2, df_session_cl, df_pop_cl50,
+                           df_aid_embeddings, df_session_embeddings):
     """
     This function retrieves candidates for each session and attaches features.
 
@@ -383,6 +385,8 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     :param df_knns_w2vec_1_2: data frame containing aid-aid_next pairs that with their word2vec rank and distance, for types carts and orders
     :param df_session_cl: data frame containing session-cluster information
     :param df_pop_cl50: data frame containing popularity of aid by tyoe, in 50 clusters of sessions
+    :param df_aid_embeddings: data frame containing embeddings of aids
+    :param df_session_embeddings: data frame containing embeddings of sessions
 
     The function first checks if the labels data frame exists and reads it if it does.
     It then reads the sessions data frame and gets unique session-aid pairs.
@@ -514,6 +518,30 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     # replace NULLs with -1 for other columns
     df = df.fill_null(-1)
 
+    # join similarity between candidates and session (cosine similarity, euclidean distance)
+    parts_df_ses_aid_sim = []
+
+    for i in range(0, len(df), 100_000):
+        df_ses_aid_sim = df[i:min(i + 100_000, len(df)), :] \
+            .select(['session', 'aid_next']) \
+            .unique() \
+            .join(df_session_embeddings, on='session', how='inner') \
+            .join(df_aid_embeddings, left_on='aid_next', right_on='aid', how='inner', suffix='_aid') \
+            .with_column(pl.sum([pl.col(f'dim_{i}') * pl.col(f'dim_{i}_aid') for i in range(100)]).alias('dot')) \
+            .with_column(pl.sum([pl.col(f'dim_{i}') * pl.col(f'dim_{i}') for i in range(100)]).sqrt().alias('norm_ses')) \
+            .with_column(pl.sum([pl.col(f'dim_{i}_aid') * pl.col(f'dim_{i}_aid') for i in range(100)]).sqrt().alias('norm_aid')) \
+            .with_column((pl.col('dot') / (pl.col('norm_ses') * pl.col('norm_aid'))).alias('cos_sim_ses_aid')) \
+            .with_column(pl.sum([(pl.col(f'dim_{i}') - pl.col(f'dim_{i}_aid')).pow(2) for i in range(100)]).sqrt().alias('eucl_dist_ses_aid'))\
+            .select(['session', 'aid_next', 'cos_sim_ses_aid', 'eucl_dist_ses_aid'])
+
+        parts_df_ses_aid_sim.append(df_ses_aid_sim)
+
+    df_ses_aid_sim = pl.concat(parts_df_ses_aid_sim)
+
+    df = df.join(df_ses_aid_sim, on=['session', 'aid_next'], how='left') \
+        .with_column(pl.col('cos_sim_ses_aid').fill_null(0)) \
+        .with_column(pl.col('eucl_dist_ses_aid').fill_null(-1))
+
     # if available, join labels for learning-to-rank
     if labels_exists:
 
@@ -527,7 +555,7 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
 
             df = df.join(df_labels_type, left_on=['session', 'aid_next'], right_on=['session', 'aid'], how='left')
 
-        # fill NULLs for target_ columns with 0 or -1
+        # fill NULLs for target_ columns with 0
         cols_target = [col for col in df.columns if col.startswith('target_')]
         df = df.with_column(pl.col(cols_target).fill_null(config.FILL_NULL_TARGET_WITH_VALUE))
 
@@ -559,6 +587,7 @@ if __name__ == '__main__':
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
+    dir_sessions_embeddings = f'{config.DIR_DATA}/{args.data_split_alias}-sessions-w2vec-parquet/test_sessions'
     dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved'
     os.makedirs(dir_out, exist_ok=True)
 
@@ -578,9 +607,17 @@ if __name__ == '__main__':
     df_session_cl = pl.read_parquet(f'{dir_counts_pop}/sessions_clusters.parquet')
     df_pop_cl50 = pl.read_parquet(f'{dir_counts_pop}/aid_clusters_50_count_ranks.parquet')
 
+    # load aids embeddings
+    df_aid_embeddings = load_aid_embeddings(args.w2vec_model_all)
+
     files_sessions = sorted(glob.glob(f'{dir_sessions}/*.parquet'))
 
-    for file_sessions in tqdm(files_sessions, total=len(files_sessions), unit='part', leave=False):
+    for file_sessions in tqdm(files_sessions, unit='part', leave=False):
+
+        df_session_embeddings = pl.read_parquet(f'{dir_sessions_embeddings}/{os.path.basename(file_sessions)}')
+        cols = [pl.col('session')] + [pl.col('embedding').arr.get(i).alias(f'dim_{i}') for i in range(100)]
+        df_session_embeddings = df_session_embeddings.select(cols)
+
         retrieve_and_gen_feats(
             file_sessions=file_sessions,
             file_labels=f'{dir_labels}/{os.path.basename(file_sessions)}',
@@ -590,6 +627,8 @@ if __name__ == '__main__':
             df_knns_w2vec_1_2=df_knns_w2vec_1_2,
             df_session_cl=df_session_cl,
             df_pop_cl50=df_pop_cl50,
+            df_aid_embeddings=df_aid_embeddings,
+            df_session_embeddings=df_session_embeddings,
         )
 
 

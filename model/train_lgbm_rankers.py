@@ -14,7 +14,7 @@ from dask.distributed import Client
 
 import config
 from dask_utils import set_up_dask_client
-from utils import set_display_options
+from utils import set_display_options, get_best_metric, get_best_iter
 
 set_display_options()
 log = logging.getLogger(os.path.basename(__file__))
@@ -27,6 +27,8 @@ log = logging.getLogger(os.path.basename(__file__))
 # https://lightgbm.readthedocs.io/en/latest/Parallel-Learning-Guide.html#how-distributed-lightgbm-works
 # https://github.com/microsoft/LightGBM/blob/477cbf373ea2138a186568ac88ef221ac74c7c71/tests/python_package_test/test_dask.py#L480
 # https://www.kaggle.com/competitions/otto-recommender-system/discussion/381469
+# https://www.kaggle.com/code/greenwolf/lightgbm-fast-recall-20/
+# https://www.kaggle.com/competitions/otto-recommender-system/discussion/380732
 
 # Statistics:
 # number of candidates per session:
@@ -49,7 +51,7 @@ PARAMS_LGBM = {
     'boosting_type': 'gbdt',  # 'gbdt', # 'dart',
     'metric': 'ndcg',
     'n_estimators': 100,
-    'learning_rate': 0.30,
+    'learning_rate': 0.30,  # use higher for orders ~0.50?, and lower for carts ~0.01?
     'max_depth': 4,
     'num_leaves': 15,
     'colsample_bytree': 0.25,  # aka feature_fraction
@@ -86,6 +88,8 @@ def load_data_for_lgbm_standard(source: Union[str, List[str]], target: str, feat
     X = df.select(feats).to_pandas().values
     y = df[target].to_numpy()
     group_counts = df.groupby('session', maintain_order=True).agg([pl.count('aid_next').alias('n')])['n'].to_numpy()
+
+    log.debug('X.shape: %s, y.shape: %s, group_counts.shape: %s', X.shape, y.shape, group_counts.shape)
 
     return X, y, group_counts, feats
 
@@ -145,7 +149,7 @@ def fit_lgbm(X_train, y_train, group_train, feats, X_valid=None, y_valid=None, g
     else:
         lgbm_ranker = lightgbm.LGBMRanker(**PARAMS_LGBM)
 
-    log.debug(f'fit {type(lgbm_ranker)}...')
+    log.debug(f'fit {type(lgbm_ranker)} with params:\n{json.dumps(PARAMS_LGBM, indent=2)}')
     lgbm_ranker.fit(
         X=X_train,
         y=y_train,
@@ -253,13 +257,13 @@ if __name__ == "__main__":
     # python -m model.train_lgbm_rankers --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
 
     # args.valid_frac = 0.30
-    # args.targets = ['clicks', 'carts', 'orders']
+    # args.targets = ['carts', 'orders']
     # args.use_dask = 0
     # args.max_files_in_train = 2
     # args.max_files_in_valid = 1
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This trains ranker models for clicks/carts/orders. ETA 60min.')
+    log.info('This trains ranker models for clicks/carts/orders. ETA 5-10min.')
 
     dir_retrieved_w_feats = f'{config.DIR_DATA}/{args.data_split_alias}-retrieved-downsampled'
     dir_out = f'{config.DIR_ARTIFACTS}/lgbm'
@@ -270,7 +274,7 @@ if __name__ == "__main__":
     for target in args.targets:
         log.info(f'Train LightGBM model for target={target}')
 
-        log.debug('Split data for training...')
+        log.debug('Split data for training and load it...')
         files = sorted(glob.glob(f'{dir_retrieved_w_feats}/{target}/*.parquet'))
         files_train, files_valid = split_files_to_train_valid(files, args.valid_frac, args.max_files_in_train, args.max_files_in_valid)
         X_train, y_train, group_train, feats = load_data_for_lgbm(files_train, f'target_{target}', dask_client=dask_client)
@@ -281,9 +285,9 @@ if __name__ == "__main__":
         log.debug('Training...')
         lgbm_ranker = fit_lgbm(X_train, y_train, group_train, feats, X_valid, y_valid, group_valid, dask_client)
 
-        log.debug(f'Model finished training. '
-                  f'Best iteration={str(lgbm_ranker.best_iteration_)}, '
-                  f'best score={str(lgbm_ranker.best_score_)}')
+        metric_, best_score = get_best_metric(lgbm_ranker)
+        best_iter = get_best_iter(lgbm_ranker)
+        log.debug(f'Model finished training. Best metric: {metric_}={best_score:.4f}, best iteration={best_iter}')
 
         feat_imp = feature_importance_lgbm(lgbm_ranker, feats)
         log.debug(f'Feature importance: \n{feat_imp.head(25)}')

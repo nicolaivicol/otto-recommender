@@ -72,3 +72,22 @@ def get_submit_file_name(prefix='submission', tag=None):
     commit_hash = '' if get_last_commit_hash() is None else f'-{get_last_commit_hash()}'
     timestamp = f'-{get_timestamp()}'
     return f'{prefix}{timestamp}{tag}{commit_hash}'
+
+
+def get_best_metric(lgbm_ranker):
+    try:
+        metric_, best_score = list(lgbm_ranker.best_score_['valid'].items())[0]
+    except (AttributeError, IndexError):
+        try:
+            metric_, best_score = list(lgbm_ranker.best_score_['train'].items())[0]
+        except:
+            metric_, best_score = 'NA', 'NA'
+
+    return metric_, best_score
+
+
+def get_best_iter(lgbm_ranker):
+    best_iter = lgbm_ranker.best_iteration_ \
+        if lgbm_ranker.best_iteration_ is not None \
+        else lgbm_ranker.get_params().get('n_estimators')
+    return best_iter

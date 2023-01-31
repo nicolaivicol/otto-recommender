@@ -104,3 +104,21 @@ Recall@20 on local test sessions: **0.5635**
 │ total  ┆ 0.563521  │
 └────────┴───────────┘
 ```
+
+## Ver 1.5.0
+* Added two new features:
+  * `cos_sim_ses_aid` - cosine similarity between session and item embedding
+  * `eucl_dist_ses_aid` - euclidean distance between session and item embedding
+
+### Results
+Recall@20 on local test sessions: **0.5661** 
+```
+┌────────┬───────────┐
+│ type   ┆ recall@20 │
+╞════════╪═══════════╡
+│ clicks ┆ 0.498642  │
+│ carts  ┆ 0.411609  │
+│ orders ┆ 0.654711  │
+│ total  ┆ 0.566174  │
+└────────┴───────────┘
+```
