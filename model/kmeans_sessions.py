@@ -12,7 +12,6 @@ import numpy as np
 from sklearn.cluster import KMeans
 
 import config
-from utils import set_display_options
 from dask_utils import set_up_dask_client
 
 from model.w2vec_aids import load_w2vec_model
@@ -20,15 +19,9 @@ import dask_ml.cluster
 import dask.array
 
 log = logging.getLogger(os.path.basename(__file__))
-set_display_options()
 
 
-# References:
-# https://realpython.com/k-means-clustering-python/
-# https://dask.pydata.org/en/latest/array-creation.html
-
-
-def load_aid_embeddings(model_name: str) -> pl.DataFrame:
+def load_aid_embeddings(model_name: str, col_prefix='dim_', col_sufix='') -> pl.DataFrame:
     w2vec_model = load_w2vec_model(model_name)
     words = w2vec_model.wv.index_to_key  # words sorted by "importance"
     embeddings = w2vec_model.wv.vectors
@@ -37,7 +30,10 @@ def load_aid_embeddings(model_name: str) -> pl.DataFrame:
     df_embeddings = pl.concat([pl.DataFrame({'aid': words}, columns={'aid': pl.Int32}),
                                pl.DataFrame(np.array(list(map_word_embedding.values())))],
                               how='horizontal')
-    df_embeddings = df_embeddings.rename({col: col.replace('column_', 'dim_') for col in df_embeddings.columns})
+    df_embeddings = df_embeddings \
+        .rename({col: (col.replace('column_', col_prefix) + col_sufix)
+                 for col in df_embeddings.columns
+                 if col.startswith('column_')})
     return df_embeddings
 
 
@@ -100,7 +96,8 @@ if __name__ == '__main__':
     use_dask = args.use_dask
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This finds sessions clusters.')
+    eta_ = 12 + 24*len(config.N_CLUSTERS_TO_FIND)
+    log.info(f'This finds sessions clusters. ETA {eta_}min.')
 
     dask_client = set_up_dask_client() if use_dask else None
 
@@ -147,8 +144,9 @@ if __name__ == '__main__':
             log.debug(f'Init Dask KMeans with: n_clusters={n_clusters}')
             km = dask_ml.cluster.KMeans(
                 n_clusters=n_clusters,
-                max_iter=300,
+                max_iter=100,
                 random_state=42,
+                tol=0.001,
             )
         else:
             log.debug(f'Init scikit KMeans with: n_clusters={n_clusters}')
@@ -156,8 +154,9 @@ if __name__ == '__main__':
                 init='random',
                 n_clusters=n_clusters,
                 n_init='auto',
-                max_iter=300,
+                max_iter=100,
                 random_state=42,
+                tol=0.001,
             )
         km.fit(X)
 
@@ -176,5 +175,4 @@ if __name__ == '__main__':
 
     dask_client.close(60)
 
-# describe_numeric(df_sessions[['n']].to_pandas())
-# df_sessions.filter(pl.col('session') == 4).to_pandas()
+    log.info('Done')

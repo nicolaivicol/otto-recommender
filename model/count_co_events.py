@@ -1,7 +1,7 @@
 import math
 import time
 import polars as pl
-from typing import Dict, List
+from typing import Dict
 from tqdm.auto import tqdm
 import json
 import os
@@ -103,11 +103,16 @@ def count_co_events_all_files(dir_sessions, dir_stats, skip_if_exists=True):
 def concat_files_w_stats(name, dir_stats, files_stats=None):
     log.debug(f'merge and aggregate counts for {name}')
 
-    if files_stats is not None:
+    file_tmp = f'{dir_stats}/tmp/{name}.parquet'  # load from cache after failed attempt (memory error)
+    loaded_from_cache = False
+    if os.path.exists(file_tmp):
+        log.debug(f'loading cached {file_tmp}')
+        df = pl.read_parquet(file_tmp)
+        loaded_from_cache = True
+    elif files_stats is not None:
         df = pl.concat([pl.read_parquet(f) for f in files_stats])
     else:
         df = pl.read_parquet(f'{dir_stats}/{name}/*.parquet')
-        # df = pl.read_parquet(f'{dir_stats}/{name}/00000000_00100000.parquet')
 
     log.debug(f'loaded {df.shape[0]:,} rows in total')
 
@@ -123,11 +128,11 @@ def concat_files_w_stats(name, dir_stats, files_stats=None):
     assert df.columns == ['aid', 'aid_next', 'count']
 
     # truncate small counts if table is big
-    if 'click_to' in name and df.shape[0] > 100_000_000:
+    if 'click_to' in name and df.shape[0] > 100_000_000 and not loaded_from_cache:
         df = df.filter((pl.col('count') >= config.MIN_COUNT_IN_PART.get(name, 1)))
 
     # groupby by parts if data frame is too big
-    if df.shape[0] > config.MAX_ROWS_POLARS_GROUPBY:
+    if df.shape[0] > config.MAX_ROWS_POLARS_GROUPBY and not loaded_from_cache:
         rows_part = config.OPTIM_ROWS_POLARS_GROUPBY
         n_parts = math.ceil(df.shape[0] / rows_part)
         max_rows_part = int(config.MAX_ROWS_POLARS_GROUPBY / df.shape[0] * rows_part)
@@ -157,8 +162,10 @@ def concat_files_w_stats(name, dir_stats, files_stats=None):
         df = pl.concat(list_df_parts)
         del list_df_parts
         log.debug(f'{df.shape[0]:,} rows after concatenation of parts')
+        os.makedirs(f'{dir_stats}/tmp', exist_ok=True)
+        df.write_parquet(f'{dir_stats}/tmp/{name}.parquet')
 
-    df = df.groupby(['aid', 'aid_next']).sum()
+    df = df.groupby(['aid', 'aid_next']).agg([pl.sum('count')])
     log.debug(f'{df.shape[0]:,} rows after aggregation')
 
     df = df\
@@ -177,9 +184,9 @@ def concat_files_w_stats(name, dir_stats, files_stats=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
-    parser.add_argument('--count', default=True)
-    parser.add_argument('--merge', default=True)
-    parser.add_argument('--merge_train_test', default=True)
+    parser.add_argument('--count', default=1)
+    parser.add_argument('--merge', default=1)
+    parser.add_argument('--merge_train_test', default=1)
     args = parser.parse_args()
 
     # python -m model.count_co_events --data_split_alias full
@@ -191,7 +198,7 @@ if __name__ == '__main__':
     folder_sessions_test = Path(dir_sessions_test).stem
     tic_start = time.time()
 
-    if args.count:
+    if args.count == 1:
         log.info('count co-events per parquet file (parts) - ETA 20min')
         tic = time.time()
         count_co_events_all_files(dir_sessions_train, f'{dir_stats}/{folder_sessions_train}')
@@ -199,7 +206,7 @@ if __name__ == '__main__':
         log.info(f'count - time elapsed: '
                  f'{time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
 
-    if args.merge:
+    if args.merge == 1:
         log.info('merge parts with counts and aggregate - ETA 30min')
         tic = time.time()
         for name in config.CO_EVENTS_TO_COUNT:
@@ -208,7 +215,7 @@ if __name__ == '__main__':
         log.info(f'merge - time elapsed: '
                  f'{time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic))}')
 
-    if args.merge_train_test:
+    if args.merge_train_test == 1:
         log.info('merge train and test counts and aggregate')
         for name in config.CO_EVENTS_TO_COUNT:
             concat_files_w_stats(
@@ -220,30 +227,3 @@ if __name__ == '__main__':
 
     log.info(f'count_co_events.py - total time elapsed: '
              f'{time.strftime("%Hh %Mmin %Ssec", time.gmtime(time.time() - tic_start))}')
-
-
-
-
-# import dask.dataframe as dd
-# df = dd.read_parquet('../data/stats/train_sessions/count_click_to_click/*.parquet')
-
-# import pandas as pd
-# import random
-#
-# df_tmp = pd.read_parquet('../data/train-test-counts-co-event/count_click_to_click.parquet')
-# random_id = random.choice(list(df_tmp['aid'].unique()))
-# df_tmp.loc[df_tmp['aid'] == random_id]
-
-# tic = time.time()
-# ....
-# toc = time.time()
-# print('self join', toc - tic)
-# print('total expected of self join', (toc - tic) * 100000 / n_sessions_in_part)  #
-
-# import random
-# df_tmp = df_part.filter(pl.col('type').is_in([1,2])).to_pandas()
-# random_session = random.choice(list(df_tmp['session'].unique()))
-# df_tmp_session = df_tmp[df_tmp['session'] == random_session].copy()
-# df_tmp_session['timestamp'] = pd.to_datetime(df_tmp_session['ts'], unit='s')
-# df_tmp_session.head(100)
-# df_part_merged = df_part_merged.sort(['session', 'ts'])

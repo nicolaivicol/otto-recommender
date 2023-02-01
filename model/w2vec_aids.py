@@ -1,10 +1,8 @@
 import os.path
 import time
 import logging
-from tqdm import tqdm
 from typing import List, Union, Dict
 import json
-import random
 import numpy as np
 import polars as pl
 from gensim.models import Word2Vec
@@ -185,10 +183,10 @@ def retrieve_w2vec_knns_via_faiss_index(model_name: str, k: int = None, first_n_
     """
 
     if k is None:
-        k = config.W2VEC_MODELS[model_name].get('k', 20)
+        k = config.W2VEC_MODELS[model_name].get('k', config.KEEP_TOP_K)
 
     if first_n_aids is None:
-        first_n_aids = config.W2VEC_MODELS[model_name].get('first_n_aids', 600_000)
+        first_n_aids = config.W2VEC_MODELS[model_name].get('first_n_aids', config.W2VEC_SEARCH_SIMILAR_FOR_FIRST_N_AIDS)
 
     file_nns = f'{get_model_file(model_name)}.top-{k}-nns-{first_n_aids}-aids.parquet'
 
@@ -212,8 +210,10 @@ if __name__ == '__main__':
     log.info('This trains all word2vec models specified in the config. '
              'ETA 65min (43min for one big model using all actions, 22min for one small model using carts+orders).')
     log.info('First, it trains the word2vec model to generate embeddings. '
-             'Then it retrieves top-k nearest AIDs after indexing the embeddings.')
+             'Then it retrieves top-k nearest items (AIDs) after indexing the embeddings.')
+
     os.makedirs(f'{config.DIR_ARTIFACTS}/word2vec', exist_ok=True)
+
     for model_name in config.W2VEC_MODELS.keys():
         log.info(f'train word2vec model \'{model_name}\' then retrieve KNNs...')
         log.debug(f'config: \n {json.dumps(config.W2VEC_MODELS[model_name], indent=2)}')
@@ -223,19 +223,6 @@ if __name__ == '__main__':
 
 
 # ******************************************************************************
-# references:
-# https://www.kaggle.com/code/radek1/word2vec-how-to-training-and-submission
-# https://www.kaggle.com/competitions/otto-recommender-system/discussion/368384
-# https://radimrehurek.com/gensim/auto_examples/tutorials/run_word2vec.html
-# https://radimrehurek.com/gensim/models/word2vec.html
-# https://radimrehurek.com/gensim/auto_examples/tutorials/run_annoy.html
-# https://www.pinecone.io/learn/faiss-tutorial/
-# https://davidefiocco.github.io/nearest-neighbor-search-with-faiss/
-# https://engineering.fb.com/2017/03/29/data-infrastructure/faiss-a-library-for-efficient-similarity-search/
-# https://github.com/spotify/annoy
-# https://jalammar.github.io/illustrated-word2vec/
-
-
 # number of AIDs per session in train/test:
 #               count   mean    std   min    5%   10%   25%   50%    95%     98%     99%     max
 # train: 10584517.000 15.442 29.418 2.000 2.000 2.000 3.000 6.000 62.000 108.000 152.000 498.000

@@ -18,12 +18,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
     parser.add_argument('--targets', nargs='+', default=['clicks', 'carts', 'orders'])
-    parser.add_argument('--keep_top_k', type=int, default=20)
+    parser.add_argument('--keep_top_k', type=int, default=config.KEEP_TOP_K)
     args = parser.parse_args()
+
     # python -m model.rank --data_split_alias full
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This predicts scores for the retrieved AIDs. ETA 22min.')
+    log.info('This predicts scores for the retrieved AIDs. ETA 60min.')
 
     dir_models = f'{config.DIR_ARTIFACTS}/lgbm'
     dir_out = f'{config.DIR_DATA}/{args.data_split_alias}-ranked'
@@ -44,18 +45,16 @@ if __name__ == "__main__":
 
         for data_file in data_files:
             log.debug(f'predict scores for file={os.path.basename(data_file)}')
-            # data_file = data_files[17]
+
             X, session, aid_next = load_data_for_lgbm_predict(data_file, feat_names)
             pred_score = lgbm_ranker.predict(X)
 
             df_pred = pl.DataFrame({'session': session, 'aid_next': aid_next, 'pred_score': pred_score})
-            df_pred = df_pred\
+            df_pred = df_pred \
                 .with_column((pl.col('pred_score').rank('ordinal', reverse=True)
-                              .over('session').cast(pl.Int16).alias('pred_rank')))\
+                              .over('session').cast(pl.Int16).alias('pred_rank'))) \
+                .filter((pl.col('pred_rank') <= args.keep_top_k)) \
                 .sort(['session', 'pred_rank'])
-
-            if args.keep_top_k is not None:
-                df_pred = df_pred.filter((pl.col('pred_rank') <= args.keep_top_k))
 
             df_pred.write_parquet(f'{dir_out_target}/{os.path.basename(data_file)}')
 

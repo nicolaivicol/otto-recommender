@@ -1,5 +1,5 @@
 #!/bin/bash
-# this script evaluates a submission
+# this script evaluates a submission using the script provided by the organizer (Otto)
 cd ../../recsys-dataset || exit
 echo $(pwd)
 python -m src.evaluate \

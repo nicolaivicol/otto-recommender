@@ -138,8 +138,8 @@ def compute_session_stats(df_test: pl.DataFrame):
 def get_session_aid_pairs_unique(df_sessions_aids_full: pl.DataFrame) -> pl.DataFrame:
     """
     Get unique session-aid pairs (session-aid is a composite key, session-aid pairs are unique)
-    Some AIDs occur multiple times within a session, but we need to have a single entru for each session-aid pair,
-    so we aggregate events by session-aid describe the sequence in the newly created columns
+    Some AIDs occur multiple times within a session, but we need to have a single entry for each session-aid pair,
+    so we aggregate events by session-aid to describe the sequence in the newly created columns
     :param df_sessions_aids_full: data frame with sessions (in table format, from parquet file)
     :return:
     """
@@ -149,7 +149,7 @@ def get_session_aid_pairs_unique(df_sessions_aids_full: pl.DataFrame) -> pl.Data
               pl.max('ts').cast(pl.Int32).alias('max_ts'), ]) \
         .with_column((pl.col('max_ts').rank('ordinal', reverse=True).over(['session', 'type'])
                       .cast(pl.Int16).alias('ts_order'))) \
-        .sort(['session', 'max_ts'], reverse=True)
+        .sort(['session', 'max_ts'], reverse=[False, True])
 
     df_sessions_aids = df_sessions_aids \
         .groupby(['session', 'aid']) \
@@ -164,16 +164,22 @@ def get_session_aid_pairs_unique(df_sessions_aids_full: pl.DataFrame) -> pl.Data
             pl.when(pl.col('type') == 1).then(pl.col('max_ts')).otherwise(pl.lit(None)).max().alias('max_ts_aid_carts'),
             pl.when(pl.col('type') == 2).then(pl.col('max_ts')).otherwise(pl.lit(None)).max().alias('max_ts_aid_orders'),
 
-            pl.when(pl.col('type') == 0).then(pl.col('ts_order')).otherwise(pl.lit(None)).max().alias('ts_order_aid_clicks'),
-            pl.when(pl.col('type') == 1).then(pl.col('ts_order')).otherwise(pl.lit(None)).max().alias('ts_order_aid_carts'),
-            pl.when(pl.col('type') == 2).then(pl.col('ts_order')).otherwise(pl.lit(None)).max().alias('ts_order_aid_orders'),
-        ]) \
+            pl.when(pl.col('type') == 0).then(pl.col('ts_order')).otherwise(pl.lit(None)).min().alias('ts_order_aid_clicks'),
+            pl.when(pl.col('type') == 1).then(pl.col('ts_order')).otherwise(pl.lit(None)).min().alias('ts_order_aid_carts'),
+            pl.when(pl.col('type') == 2).then(pl.col('ts_order')).otherwise(pl.lit(None)).min().alias('ts_order_aid_orders'),
+        ])
+
+    df_sessions_aids = df_sessions_aids \
         .with_column((pl.col('max_ts_aid').rank('ordinal', reverse=True).over('session')
                       .cast(pl.Int16).alias('ts_order_aid'))) \
-        .with_column((pl.col('ts_order_aid')/ pl.max('ts_order_aid').over('session') * 100).round(0)
+        .with_column((pl.col('ts_order_aid') / pl.max('ts_order_aid').over('session') * 100).round(0)
                      .cast(pl.Int8).alias('ts_order_aid_rel'))  \
         .with_column((pl.col('n_aid').rank('ordinal', reverse=True).over('session')
                       .cast(pl.Int16).alias('rank_by_n_aid'))) \
+        .with_column((pl.col('n_aid_carts').rank('ordinal', reverse=True).over('session')
+                      .cast(pl.Int16).alias('rank_by_n_aid_carts'))) \
+        .with_column((pl.col('n_aid_orders').rank('ordinal', reverse=True).over('session')
+                      .cast(pl.Int16).alias('rank_by_n_aid_orders'))) \
         .with_column((((pl.col('n_aid_carts') > 0) & (pl.col('n_aid_orders') == 0))
                       | (pl.col('max_ts_aid_carts') > pl.col('max_ts_aid_orders')))
                      .fill_null(0).cast(pl.Int8).alias('left_in_cart')) \
@@ -194,7 +200,9 @@ def get_session_aid_pairs_unique(df_sessions_aids_full: pl.DataFrame) -> pl.Data
         ((pl.col('ts_order_aid_clicks') <= config.RETRIEVE_N_LAST_CLICKS)) |
         ((pl.col('ts_order_aid_carts') <= config.RETRIEVE_N_LAST_CARTS)) |
         ((pl.col('ts_order_aid_orders') <= config.RETRIEVE_N_LAST_ORDERS)) |
-        ((pl.col('rank_by_n_aid') <= config.RETRIEVE_N_MOST_FREQUENT))
+        ((pl.col('rank_by_n_aid') <= config.RETRIEVE_N_MOST_FREQUENT)) |
+        ((pl.col('rank_by_n_aid_carts') <= config.RETRIEVE_N_MOST_FREQUENT)) |
+        ((pl.col('rank_by_n_aid_orders') <= config.RETRIEVE_N_MOST_FREQUENT))
     )
 
     df_sessions_aids = df_sessions_aids \
@@ -202,15 +210,17 @@ def get_session_aid_pairs_unique(df_sessions_aids_full: pl.DataFrame) -> pl.Data
             'session',
             'aid',
             'n_aid',
-            'rank_by_n_aid',
             'n_aid_clicks',
             'n_aid_carts',
             'n_aid_orders',
+            'rank_by_n_aid',
+            'rank_by_n_aid_carts',
+            'rank_by_n_aid_orders',
             'max_ts_aid',
-            'ts_aid_rel_pos_in_session',
             'max_ts_aid_clicks',
             'max_ts_aid_carts',
             'max_ts_aid_orders',
+            'ts_aid_rel_pos_in_session',
             'ts_order_aid',
             'ts_order_aid_rel',
             'ts_order_aid_clicks',
@@ -294,12 +304,41 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
     cols_after_remove_aid = list(df.columns)
     cols_after_remove_aid.remove('aid')
 
+    # when aid=aid_next, compute features about the item itself within the session
+    # (how many times it occured, how recent, was left in the cart, etc.)
+    feats_self = [
+        (pl.col('aid') == pl.col('aid_next')).sum().cast(pl.Int8).alias('aid_next_is_aid'),
+        # counts of events, total and by type
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('n_aid')).sum().cast(pl.Int16).alias('slf_n'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('n_aid_clicks')).sum().cast(pl.Int16).alias('slf_n_clicks'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('n_aid_carts')).sum().cast(pl.Int16).alias('slf_n_carts'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('n_aid_orders')).sum().cast(pl.Int16).alias('slf_n_orders'),
+        # ranks by counts
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('rank_by_n_aid')).min().cast(pl.Int16).alias('slf_rank_by_n'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('rank_by_n_aid_carts')).min().cast(pl.Int16).alias('slf_rank_by_n_carts'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('rank_by_n_aid_orders')).min().cast(pl.Int16).alias('slf_rank_by_n_orders'),
+        # when it occured last time
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('max_ts_aid')).max().cast(pl.Int32).alias('slf_max_ts'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('max_ts_aid_clicks')).max().cast(pl.Int32).alias('slf_max_ts_clicks'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('max_ts_aid_carts')).max().cast(pl.Int32).alias('slf_max_ts_carts'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('max_ts_aid_orders')).max().cast(pl.Int32).alias('slf_max_ts_orders'),
+        # when it occured last time, relative to the session
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_aid_rel_pos_in_session')).min().cast(pl.Int16).alias('slf_ts_rel_pos_in_session'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_order_aid')).min().cast(pl.Int16).alias('slf_ts_order'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_order_aid_rel')).min().cast(pl.Int16).alias('slf_ts_order_rel'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_order_aid_clicks')).min().cast(pl.Int16).alias('slf_ts_order_clicks'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_order_aid_carts')).min().cast(pl.Int16).alias('slf_ts_order_carts'),
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_order_aid_orders')).min().cast(pl.Int16).alias('slf_ts_order_orders'),
+        # whether it was left in cart
+        ((pl.col('aid') == pl.col('aid_next')) * pl.col('left_in_cart')).sum().cast(pl.Int8).alias('slf_left_in_cart'),
+    ]
+
+    # when multiple aids recommending the same aid_next, aggregate features
     aggs_events_session = [
         pl.count().cast(pl.Int16).alias('n_uniq_aid'),
         (pl.col('n_aid_clicks') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_clicks'),
         (pl.col('n_aid_carts') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_carts'),
         (pl.col('n_aid_orders') > 0).sum().cast(pl.Int16).alias('n_uniq_aid_orders'),
-        (pl.col('aid') == pl.col('aid_next')).sum().cast(pl.Int8).alias('n_aid_next_is_aid'),
 
         pl.sum('n_aid').cast(pl.Int16).alias('n_aid'),
         pl.sum('n_aid_clicks').cast(pl.Int16).alias('n_aid_clicks'),
@@ -315,7 +354,6 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.mean('max_ts_aid_orders').cast(pl.Int32).alias('mean_max_ts_aid_orders'),
 
         pl.min('ts_order_aid').cast(pl.Int16).alias('ts_order_aid'),
-        ((pl.col('aid') == pl.col('aid_next')) * pl.col('ts_order_aid')).max().cast(pl.Int16).alias('ts_order_aid_slf'),
         pl.min('ts_order_aid_rel').cast(pl.Int16).alias('ts_order_aid_rel'),
         pl.min('ts_order_aid_clicks').cast(pl.Int16).alias('ts_order_aid_clicks'),
         pl.min('ts_order_aid_carts').cast(pl.Int16).alias('ts_order_aid_carts'),
@@ -323,7 +361,6 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.mean('ts_aid_rel_pos_in_session').cast(pl.Int16).alias('ts_aid_rel_pos_in_session'),
 
         pl.min('rank_by_n_aid').cast(pl.Int16).alias('rank_by_n_aid'),
-        ((pl.col('aid') == pl.col('aid_next')) * pl.col('left_in_cart')).sum().cast(pl.Int8).alias('left_in_cart'),
     ]
 
     # counts of co-events
@@ -351,10 +388,12 @@ def keep_sessions_aids_next(df: pl.DataFrame) -> pl.DataFrame:
         pl.min('rank_w2vec_1_2').cast(pl.Int16).alias('best_rank_w2vec_1_2'),
     ]
 
-    df_session_aid_next = df.groupby(['session', 'aid_next']).agg(aggs_events_session + aggs_counts_co_events + aggs_w2vec)
+    df_session_aid_next = df \
+        .groupby(['session', 'aid_next']) \
+        .agg(feats_self + aggs_events_session + aggs_counts_co_events + aggs_w2vec)
 
-    missing_cols = [c for c in cols_after_remove_aid if c not in df_session_aid_next.columns]
-    assert len(missing_cols) == 0, f'columns missing from agregation: {",".join(missing_cols)}'
+    # missing_cols = [c for c in cols_after_remove_aid if c not in df_session_aid_next.columns]
+    # assert len(missing_cols) == 0, f'columns missing from agregation: {",".join(missing_cols)}'
 
     # df1 = df.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
     # df2 = df_session_aid_next.filter((pl.col('session') == 11117700) & (pl.col('aid_next') == 1460571)).to_pandas()
@@ -371,22 +410,30 @@ def stats_number_of_aid_next_per_session(df):
     return summary_
 
 
-def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_events,
-                           df_knns_w2vec_all, df_knns_w2vec_1_2, df_session_cl, df_pop_cl50,
-                           df_aid_embeddings, df_session_embeddings):
+def load_sessions_embeddings(file):
+    """Load session embeddings from parquet file"""
+    df_session_embeddings = pl.read_parquet(file)
+    size = len(df_session_embeddings[0, 'embedding'])
+    cols = [pl.col('session')] + [pl.col('embedding').arr.get(i).alias(f'dim_{i}_ses') for i in range(size)]
+    df_session_embeddings = df_session_embeddings.select(cols)  # list from embedding to separate columns
+    return df_session_embeddings
+
+
+def retrieve_and_gen_feats(
+        df_sessions_aids_full: pl.DataFrame,
+        aid_pairs_co_events: Dict[str, pl.DataFrame],
+        df_knns_w2vec_all: pl.DataFrame,
+        df_knns_w2vec_1_2: pl.DataFrame,
+        df_session_cl: pl.DataFrame,
+        df_pop_cl1: pl.DataFrame,
+        df_pop_cl50: pl.DataFrame,
+        df_aid_embeddings: pl.DataFrame,
+        df_session_embeddings: pl.DataFrame,
+        df_labels: pl.DataFrame,
+        file_out: str,
+):
     """
     This function retrieves candidates for each session and attaches features.
-
-    :param file_sessions: file path of the sessions data frame in parquet format
-    :param file_labels: file path of the labels data frame in parquet format (if it exists)
-    :param file_out: file path of the output data frame in parquet format
-    :param aid_pairs_co_events: a dictionary of data frames containing co-event counts for different event types
-    :param df_knns_w2vec_all: data frame containing all aid-aid_next pairs with their word2vec rank and distance, for all types
-    :param df_knns_w2vec_1_2: data frame containing aid-aid_next pairs that with their word2vec rank and distance, for types carts and orders
-    :param df_session_cl: data frame containing session-cluster information
-    :param df_pop_cl50: data frame containing popularity of aid by tyoe, in 50 clusters of sessions
-    :param df_aid_embeddings: data frame containing embeddings of aids
-    :param df_session_embeddings: data frame containing embeddings of sessions
 
     The function first checks if the labels data frame exists and reads it if it does.
     It then reads the sessions data frame and gets unique session-aid pairs.
@@ -394,14 +441,38 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     The function then joins co-event counts and word2vec rank/distance as features.
     It trims weaker pairs so that more recent AIDs have more pairs and older AIDs have less pairs.
     The function then keeps session-aid_next only as key, removes aid, and aggregates other columns.
-    It then saves the output data frame in the specified file path in parquet format.
+
+    Parameters
+    ----------
+    df_sessions_aids_full: pl.DataFrame([session, aid, ts, type])
+        all sessions with items (aid) and their types
+    aid_pairs_co_events
+        a dictionary of data frames containing co-event counts for different event types
+    df_knns_w2vec_all
+        data frame containing all aid-aid_next pairs with their word2vec rank and distance, for all types
+    df_knns_w2vec_1_2
+        data frame containing aid-aid_next pairs that with their word2vec rank and distance, for types carts and orders
+    df_session_cl
+        data frame containing session-cluster information
+    df_pop_cl1
+        data frame containing general popularity of aid (item) by type (1 cluster, i.e. general for all sessions)
+    df_pop_cl50
+        data frame containing popularity of aid (item) by type, in 50 clusters of sessions
+    df_aid_embeddings: pl.DataFrame([aid, dim_0_aid, dim_1_aid, ...])
+        embeddings of aids (items)
+    df_session_embeddings: pl.DataFrame([session, dim_0_ses, dim_1_ses, ...])
+        embeddings of sessions
+    df_labels: pl.DataFrame([session, aid_next, label])
+        labels for the session-aid_next pairs
+    file_out: str
+        file path of the output data frame in parquet format
+
+    Returns
+    -------
+    df:
+        It saves the output data frame in the specified file path in parquet format.
     """
 
-    labels_exists = os.path.exists(file_labels)
-    if labels_exists:
-        df_labels = pl.read_parquet(file_labels)
-
-    df_sessions_aids_full = pl.read_parquet(file_sessions)  # has columns: [session, aid, ts, type]
     df_sessions_aids = get_session_aid_pairs_unique(df_sessions_aids_full)
     df_aid_pairs = get_all_aid_pairs(df_sessions_aids, aid_pairs_co_events, df_knns_w2vec_all, df_knns_w2vec_1_2)
 
@@ -458,6 +529,11 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('max_ts_session') - pl.col('max_ts_aid_carts')).alias('since_ts_aid_carts'),
         (pl.col('max_ts_session') - pl.col('max_ts_aid_orders')).alias('since_ts_aid_orders'),
 
+        (pl.col('max_ts_session') - pl.col('slf_max_ts')).alias('slf_since_ts'),
+        (pl.col('max_ts_session') - pl.col('slf_max_ts_clicks')).alias('slf_since_ts_clicks'),
+        (pl.col('max_ts_session') - pl.col('slf_max_ts_carts')).alias('slf_since_ts_carts'),
+        (pl.col('max_ts_session') - pl.col('slf_max_ts_orders')).alias('slf_since_ts_orders'),
+
         (pl.col('max_ts_aid') - pl.col('min_ts_session')).alias('since_session_start_ts_aid'),
         (pl.col('max_ts_aid_orders') - pl.col('min_ts_session')).alias('since_session_start_ts_aid_orders'),
 
@@ -474,12 +550,14 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
          ).cast(pl.Int8).alias('rel_pos_mean_max_ts_aid_orders_in_session'),
     ])
     df = df.drop(['min_ts_session', 'max_ts_session', 'max_ts_aid', 'max_ts_aid_clicks', 'max_ts_aid_carts',
-                  'max_ts_aid_orders', 'mean_max_ts_aid', 'mean_max_ts_aid_orders'])
+                  'max_ts_aid_orders', 'mean_max_ts_aid', 'mean_max_ts_aid_orders',
+                  'slf_max_ts', 'slf_max_ts_clicks', 'slf_max_ts_carts', 'slf_max_ts_orders',
+                  ])
 
     # add info about sources of candidates
     df = df.with_columns([
         pl.lit(1).cast(pl.Int8).alias('src_any'),
-        (pl.col('n_aid_next_is_aid') > 0).cast(pl.Int8).alias('src_self'),
+        (pl.col('aid_next_is_aid') > 0).cast(pl.Int8).alias('src_self'),
         (pl.col('n_aid_clicks') * pl.col('click_to_click_count') > 0).cast(pl.Int8).alias('src_click_to_click'),
         (pl.col('n_aid_clicks') * pl.col('click_to_cart_or_buy_count') > 0).cast(pl.Int8).alias('src_click_to_cart_or_buy'),
         (pl.col('n_aid_carts') * pl.col('cart_to_cart_count') > 0).cast(pl.Int8).alias('src_cart_to_cart'),
@@ -488,7 +566,7 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         (pl.col('n_w2vec_all') > 0).cast(pl.Int8).alias('src_w2vec_all'),
         (pl.col('n_w2vec_1_2') > 0).cast(pl.Int8).alias('src_w2vec_1_2'),
     ])
-    df = df.drop(['n_aid_next_is_aid'])
+    df = df.drop(['aid_next_is_aid'])
 
     # add new 'next_aid' per session, based on popularity within doc2vec cluster of the session
     df = df.join(df_session_cl.select(['session', 'cl50']), on='session', how='left')
@@ -506,6 +584,11 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     # join new candidates with their ranks within clusters
     df = df.join(df_ses_cl50_aid, on=['session', 'cl50', 'aid_next'], how='outer').drop('cl50')
 
+    # add general popularity ranks as features, without adding new candidates
+    df = df.join(
+        df_pop_cl1.select(['aid', 'rank_clicks_cl1', 'rank_carts_cl1', 'rank_orders_cl1']),
+        left_on='aid_next', right_on='aid', how='left')
+
     # mark all candidates with 'src_any'=1
     df = df.with_column(pl.lit(1).cast(pl.Int8).alias('src_any'))
 
@@ -522,16 +605,15 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
     parts_df_ses_aid_sim = []
 
     for i in range(0, len(df), 100_000):
-        df_ses_aid_sim = df[i:min(i + 100_000, len(df)), :] \
-            .select(['session', 'aid_next']) \
+        df_ses_aid_sim = df[i:min(i + 100_000, len(df)), ['session', 'aid_next']] \
             .unique() \
             .join(df_session_embeddings, on='session', how='inner') \
             .join(df_aid_embeddings, left_on='aid_next', right_on='aid', how='inner', suffix='_aid') \
-            .with_column(pl.sum([pl.col(f'dim_{i}') * pl.col(f'dim_{i}_aid') for i in range(100)]).alias('dot')) \
-            .with_column(pl.sum([pl.col(f'dim_{i}') * pl.col(f'dim_{i}') for i in range(100)]).sqrt().alias('norm_ses')) \
+            .with_column(pl.sum([pl.col(f'dim_{i}_ses') * pl.col(f'dim_{i}_aid') for i in range(100)]).alias('dot')) \
+            .with_column(pl.sum([pl.col(f'dim_{i}_ses') * pl.col(f'dim_{i}_ses') for i in range(100)]).sqrt().alias('norm_ses')) \
             .with_column(pl.sum([pl.col(f'dim_{i}_aid') * pl.col(f'dim_{i}_aid') for i in range(100)]).sqrt().alias('norm_aid')) \
             .with_column((pl.col('dot') / (pl.col('norm_ses') * pl.col('norm_aid'))).alias('cos_sim_ses_aid')) \
-            .with_column(pl.sum([(pl.col(f'dim_{i}') - pl.col(f'dim_{i}_aid')).pow(2) for i in range(100)]).sqrt().alias('eucl_dist_ses_aid'))\
+            .with_column(pl.sum([(pl.col(f'dim_{i}_ses') - pl.col(f'dim_{i}_aid')).pow(2) for i in range(100)]).sqrt().alias('eucl_dist_ses_aid'))\
             .select(['session', 'aid_next', 'cos_sim_ses_aid', 'eucl_dist_ses_aid'])
 
         parts_df_ses_aid_sim.append(df_ses_aid_sim)
@@ -542,8 +624,10 @@ def retrieve_and_gen_feats(file_sessions, file_labels, file_out, aid_pairs_co_ev
         .with_column(pl.col('cos_sim_ses_aid').fill_null(0)) \
         .with_column(pl.col('eucl_dist_ses_aid').fill_null(-1))
 
+    # TODO: compute ranks by main features, then compute a weighted rank out of these ranks, sort by it
+
     # if available, join labels for learning-to-rank
-    if labels_exists:
+    if df_labels is not None:
 
         for type, type_id in config.TYPE2ID.items():
             col_target = f'target_{type}'
@@ -583,7 +667,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     log.info('Start retrieve.py with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This retrieves candidates and generates features, ETA ~30min.')
+    log.info('This retrieves candidates and generates features, ETA ~40min.')
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_sessions'
     dir_labels = f'{config.DIR_DATA}/{args.data_split_alias}-parquet/test_labels'
@@ -606,29 +690,32 @@ if __name__ == '__main__':
     dir_counts_pop = f'{config.DIR_DATA}/{args.data_split_alias}-counts-popularity'
     df_session_cl = pl.read_parquet(f'{dir_counts_pop}/sessions_clusters.parquet')
     df_pop_cl50 = pl.read_parquet(f'{dir_counts_pop}/aid_clusters_50_count_ranks.parquet')
+    df_pop_cl1 = pl.read_parquet(f'{dir_counts_pop}/aid_clusters_1_count_ranks.parquet')
 
-    # load aids embeddings
-    df_aid_embeddings = load_aid_embeddings(args.w2vec_model_all)
+    # load all available embeddings of aids (items)
+    df_aid_embeddings = load_aid_embeddings(args.w2vec_model_all, col_sufix='_aid')
 
     files_sessions = sorted(glob.glob(f'{dir_sessions}/*.parquet'))
 
     for file_sessions in tqdm(files_sessions, unit='part', leave=False):
 
-        df_session_embeddings = pl.read_parquet(f'{dir_sessions_embeddings}/{os.path.basename(file_sessions)}')
-        cols = [pl.col('session')] + [pl.col('embedding').arr.get(i).alias(f'dim_{i}') for i in range(100)]
-        df_session_embeddings = df_session_embeddings.select(cols)
+        df_sessions_aids_full = pl.read_parquet(file_sessions)  # has columns: [session, aid, ts, type]
+        df_session_embeddings = load_sessions_embeddings(f'{dir_sessions_embeddings}/{os.path.basename(file_sessions)}')
+        file_labels = f'{dir_labels}/{os.path.basename(file_sessions)}'
+        df_labels = pl.read_parquet(file_labels) if os.path.exists(file_labels) else None
 
         retrieve_and_gen_feats(
-            file_sessions=file_sessions,
-            file_labels=f'{dir_labels}/{os.path.basename(file_sessions)}',
-            file_out=f'{dir_out}/{os.path.basename(file_sessions)}',
+            df_sessions_aids_full=df_sessions_aids_full,
             aid_pairs_co_events=aid_pairs_co_events,
             df_knns_w2vec_all=df_knns_w2vec_all,
             df_knns_w2vec_1_2=df_knns_w2vec_1_2,
             df_session_cl=df_session_cl,
+            df_pop_cl1=df_pop_cl1,
             df_pop_cl50=df_pop_cl50,
             df_aid_embeddings=df_aid_embeddings,
             df_session_embeddings=df_session_embeddings,
+            df_labels=df_labels,
+            file_out=f'{dir_out}/{os.path.basename(file_sessions)}',
         )
 
 
@@ -657,27 +744,6 @@ if __name__ == '__main__':
 
 # ver 4: 2023-01-17 01:37
 # {"recall_clicks": 0.5454, "recall_carts": 0.48396, "recall_orders": 0.6868, "recall": 0.61181}
-
-# kaggle:
-# https://www.kaggle.com/competitions/otto-recommender-system/discussion/370116
-# for 200 candidates
-# clicks recall = 0.58486 carts recall = 0.49270 orders recall = 0.69467
-# clicks recall = 0.6506179886006195 carts recall = 0.527631391786734 orders recall = 0.7216145392798664
-
-# https://www.kaggle.com/competitions/otto-recommender-system/discussion/376789
-# recall at 100
-# clicks recall = 0.6515316707053238
-# carts recall = 0.5054104031001835
-# orders recall = 0.7048352553279094
-# overall recall = 0.6396774411973329
-#
-# recall at 20
-# clicks recall = 0.5340063432688679
-# carts recall = 0.4237135902195957
-# orders recall = 0.6600268258685532
-# overall recall = 0.5765308069138975
-# ******************************************************************************
-
 
 
 # ******************************************************************************

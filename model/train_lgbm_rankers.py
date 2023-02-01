@@ -19,17 +19,6 @@ from utils import set_display_options, get_best_metric, get_best_iter
 set_display_options()
 log = logging.getLogger(os.path.basename(__file__))
 
-# References:
-# https://medium.datadriveninvestor.com/a-practical-guide-to-lambdamart-in-lightgbm-f16a57864f6
-# https://github.com/jameslamb/lightgbm-dask-testing/blob/main/notebooks/demo.ipynb
-# https://www.kaggle.com/code/radek1/polars-proof-of-concept-lgbm-ranker
-# https://lightgbm.readthedocs.io/en/latest/Parameters.html
-# https://lightgbm.readthedocs.io/en/latest/Parallel-Learning-Guide.html#how-distributed-lightgbm-works
-# https://github.com/microsoft/LightGBM/blob/477cbf373ea2138a186568ac88ef221ac74c7c71/tests/python_package_test/test_dask.py#L480
-# https://www.kaggle.com/competitions/otto-recommender-system/discussion/381469
-# https://www.kaggle.com/code/greenwolf/lightgbm-fast-recall-20/
-# https://www.kaggle.com/competitions/otto-recommender-system/discussion/380732
-
 # Statistics:
 # number of candidates per session:
 # describe_numeric(df_part.groupby('session').agg([pl.count('aid_next').alias('n')]).to_pandas()[['n']])
@@ -46,31 +35,8 @@ log = logging.getLogger(os.path.basename(__file__))
 #  0.004535      | 0.001491     | 0.00122
 
 
-PARAMS_LGBM = {
-    'objective': 'lambdarank',
-    'boosting_type': 'gbdt',  # 'gbdt', # 'dart',
-    'metric': 'ndcg',
-    'n_estimators': 100,
-    'learning_rate': 0.30,  # use higher for orders ~0.50?, and lower for carts ~0.01?
-    'max_depth': 4,
-    'num_leaves': 15,
-    'colsample_bytree': 0.25,  # aka feature_fraction
-    'subsample': 0.50,  # aka bagging_fraction
-    # 'bagging_freq': 1,
-    'min_child_samples': 20,  # aka min_data_in_leaf  ? read github link with test
-    'importance_type': 'gain',
-    'seed': 42,
-}
-
-PARAMS_LGBM_FIT = {
-    'eval_at': [20],
-    # early_stopping_rounds=20,
-    'verbose': 25,
-}
-
-
 def _infer_feats_from_df(df):
-    non_feats = ['session', 'aid_next', 'target_clicks', 'target_carts', 'target_orders']
+    non_feats = ['session', 'aid_next', 'target_clicks', 'target_carts', 'target_orders', 'rank_total_cl1', ]
     return [c for c in df.columns if c not in non_feats]
 
 
@@ -145,11 +111,11 @@ def fit_lgbm(X_train, y_train, group_train, feats, X_valid=None, y_valid=None, g
     eval_names, eval_set, eval_group = _handle_evals(X_train, y_train, group_train, X_valid, y_valid, group_valid)
 
     if dask_client is not None:
-        lgbm_ranker = lightgbm.DaskLGBMRanker(tree_learner_type='data_parallel', client=dask_client, time_out=5, **PARAMS_LGBM)
+        lgbm_ranker = lightgbm.DaskLGBMRanker(tree_learner_type='data_parallel', client=dask_client, time_out=5, **config.PARAMS_LGBM)
     else:
-        lgbm_ranker = lightgbm.LGBMRanker(**PARAMS_LGBM)
+        lgbm_ranker = lightgbm.LGBMRanker(**config.PARAMS_LGBM)
 
-    log.debug(f'fit {type(lgbm_ranker)} with params:\n{json.dumps(PARAMS_LGBM, indent=2)}')
+    log.debug(f'fit {type(lgbm_ranker)} with params:\n{json.dumps(config.PARAMS_LGBM, indent=2)}')
     lgbm_ranker.fit(
         X=X_train,
         y=y_train,
@@ -158,7 +124,7 @@ def fit_lgbm(X_train, y_train, group_train, feats, X_valid=None, y_valid=None, g
         eval_names=eval_names,
         eval_set=eval_set,
         eval_group=eval_group,
-        **PARAMS_LGBM_FIT,
+        **config.PARAMS_LGBM_FIT,
     )
     return lgbm_ranker
 
@@ -255,12 +221,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # python -m model.train_lgbm_rankers --valid_frac 0.25 --use_dask 0 --max_files_in_train 6 --max_files_in_valid 1
-
-    # args.valid_frac = 0.30
-    # args.targets = ['carts', 'orders']
-    # args.use_dask = 0
-    # args.max_files_in_train = 2
-    # args.max_files_in_valid = 1
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
     log.info('This trains ranker models for clicks/carts/orders. ETA 5-10min.')

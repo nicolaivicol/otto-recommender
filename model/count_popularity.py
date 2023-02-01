@@ -14,13 +14,13 @@ log = logging.getLogger(os.path.basename(__file__))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_split_alias', default='train-test')
-    parser.add_argument('--keep_top_n', default=20)
+    parser.add_argument('--keep_top_k', default=config.KEEP_TOP_K)
     args = parser.parse_args()
 
-    keep_top_n = args.keep_top_n
+    keep_top_k = args.keep_top_k
 
     log.info(f'Running {os.path.basename(__file__)} with parameters: \n' + json.dumps(vars(args), indent=2))
-    log.info('This counts popularity ranks of aids within session clusters.')
+    log.info('This counts popularity ranks of aids within session clusters. ETA 10min.')
 
     dir_sessions = f'{config.DIR_DATA}/{args.data_split_alias}-parquet'
     dir_sessions_clusters = f'{config.DIR_DATA}/{args.data_split_alias}-sessions-clusters'
@@ -41,6 +41,8 @@ if __name__ == '__main__':
         df_sessions = df_sessions.with_column(pl.lit(0).cast(pl.Int8).alias('cl1'))
 
     for n_clusters in config.N_CLUSTERS_TO_JOIN:
+        if n_clusters == 1:
+            continue
         df_clusters = pl.read_parquet(f'{dir_sessions_clusters}/sessions-clusters-{n_clusters}.parquet')
         df_clusters = df_clusters.rename({'cluster': f'cl{n_clusters}'})
         df_sessions = df_sessions.join(df_clusters, on='session', how='left')
@@ -77,9 +79,9 @@ if __name__ == '__main__':
         df_agg = df_agg.select(['aid', f'cl{n_clusters}'] + cols_rank)
 
         # keep only top N by each type and horizon
-        df_agg = df_agg.filter(pl.min(cols_rank) <= keep_top_n)
+        df_agg = df_agg.filter(pl.min(cols_rank) <= keep_top_k)
 
-        log.debug(f'Save clusters with top {keep_top_n} aids by each type/horizon: \n' + str(df_agg))
+        log.debug(f'Save clusters with top {keep_top_k} aids by each type/horizon: \n' + str(df_agg))
         df_agg.write_parquet(f'{dir_out}/aid_clusters_{n_clusters}_count_ranks.parquet')
 
     cols_cl = [col for col in df_sessions.columns if col.startswith('cl')]

@@ -6,7 +6,7 @@ from pathlib import Path
 import os
 import logging
 
-VERSION = '1.5.0'
+VERSION = '1.6.0'
 
 # Directories
 # ******************************************************************************
@@ -26,13 +26,17 @@ logging.basicConfig(
     level=LOGS_LEVEL,
 )
 
+# Submission
+# ******************************************************************************
+KEEP_TOP_K = 20  # submit top k candidates for each session
+
 # Feature engineering
 # ******************************************************************************
 TYPES = ['clicks', 'carts', 'orders']
 TYPE2ID = {'clicks': 0, 'carts': 1, 'orders': 2}
-ID2TYPE = {0: 'clicks', 1: 'carts', 2: 'orders'}
-# df['type'].map(type2id) # df['type'].map(lambda i: id2type[i])
 
+# RETRIEVAL WITH CO-COUNTS
+# ******************************************************************************
 # filter co-events when doing self merge
 MIN_TIME_TO_NEXT = -24 * 60 * 60  # value zero means that next event can't be before this event
 MAX_TIME_TO_NEXT = 24 * 60 * 60  # 24 hours * 60 min * 60 sec
@@ -44,9 +48,9 @@ MAP_MAX_TIME_TO_NEXT = {
     'buy_to_buy': MAX_TIME_TO_NEXT,
 }
 
-
+# managing RAM usage when doing groupby in polars
 OPTIM_ROWS_POLARS_GROUPBY = 100_000_000
-MAX_ROWS_POLARS_GROUPBY = 300_000_000
+MAX_ROWS_POLARS_GROUPBY = 300_000_000  # this depends on RAM, 300M is for 16GB RAM
 
 # minimum count to be saved on disk
 MIN_COUNT_TO_SAVE = {
@@ -68,9 +72,7 @@ CO_EVENTS_TO_COUNT = [
     'buy_to_buy',
 ]
 
-# RETRIEVAL
-# to retrieve candidates co-events, keep only the last N events in session
-# use a high number to keep all
+# to retrieve candidates co-events, keep only the last N events in session (higher number to keep more)
 RETRIEVE_N_LAST_CLICKS = 99  # 30: percentile 99%
 RETRIEVE_N_LAST_CARTS = 99  # 25: percentile 99.5%
 RETRIEVE_N_LAST_ORDERS = 99  # 25: percentile 99.5%
@@ -101,7 +103,10 @@ RETRIEVAL_CO_COUNTS_TO_JOIN = [
     'buy_to_buy',
 ]
 
+# RETRIEVAL WITH WORD2VEC
+# ******************************************************************************
 W2VEC_USE_CACHE = True
+W2VEC_SEARCH_SIMILAR_FOR_FIRST_N_AIDS = 600_000
 W2VEC_MODELS = {
     'word2vec-train-test-types-all-size-100-mincount-5-window-10': {
         # source of sessions (as sentences) with AIDs (as words)
@@ -185,10 +190,38 @@ W2VEC_MODELS = {
     },
 }
 
-N_CLUSTERS_TO_FIND = [10, 20, 50]  # which cluster size to find; can't find more than 50 clusters
-N_CLUSTERS_TO_JOIN = [50]
+# RETRIEVAL WITH K-MEANS CLUSTERING OF SESSIONS
+# ******************************************************************************
+N_CLUSTERS_TO_FIND = [50]  # which cluster size to find; can't find more than 50 clusters
+N_CLUSTERS_TO_JOIN = [1, 50]
 
+# MODELING
+# ******************************************************************************
 FILL_NULL_TARGET_WITH_VALUE = 0  # fill NULLs with 0 in target columns
 
+# downsample negative samples
 DOWNSAMPLE_RATIO_NEG_TO_POS = 40  # keep a ratio of max N negative samples to 1 positive sample
 DOWNSAMPLE_MAX_NEG_PER_SESSION = 100  # keep at most N negative samples per session
+
+# LightGBM
+PARAMS_LGBM = {
+    'objective': 'lambdarank',
+    'boosting_type': 'gbdt',  # 'gbdt', # 'dart',
+    'metric': 'ndcg',
+    'n_estimators': 150,
+    'learning_rate': 0.25,  # use higher for orders ~0.50?, and lower for carts ~0.01?
+    'max_depth': 4,
+    'num_leaves': 15,
+    'colsample_bytree': 0.25,  # aka feature_fraction
+    'subsample': 0.50,  # aka bagging_fraction
+    # 'bagging_freq': 1,
+    'min_child_samples': 20,  # aka min_data_in_leaf  ? read github link with test
+    'importance_type': 'gain',
+    'seed': 42,
+}
+
+PARAMS_LGBM_FIT = {
+    'eval_at': [20],
+    # early_stopping_rounds=20,
+    'verbose': 25,
+}

@@ -122,3 +122,5 @@ Recall@20 on local test sessions: **0.5661**
 │ total  ┆ 0.566174  │
 └────────┴───────────┘
 ```
+Recall@20 on LB: **0.572** 
+Recall@20 on Private: **0.573**
