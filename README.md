@@ -284,6 +284,12 @@ Overall, about 100 features were created. However, this proved to be insufficien
 
 2. Download data from kaggle to `data/full` folder.
    Rename files to `train_sessions.jsonl` and `test_session.jsonl`.
+```shell
+kaggle competitions download -c otto-recommender-system -p data
+unzip data/otto-recommender-system.zip data/full
+mv data/full/train.jsonl data/full/train_sessions.jsonl
+mv data/full/test.jsonl data/full/test_sessions.jsonl
+```
 
 3. Split `train_sessions.jsonl` to train/test with [etl/split_to_train_test.sh](etl/split_to_train_test.sh). 
    Test to have 1 week. Splitted data located in `data/train-test` folder.
